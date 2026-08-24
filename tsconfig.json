@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "target": "es2017",
+    "lib": ["dom", "dom.iterable", "es2017"],
+    "module": "esnext",
+    "jsx": "react-jsx",
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "strictPropertyInitialization": false,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "strictNullChecks": true,
+    "sourceMap": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "moduleResolution": "bundler",
+    "types": ["vite/client", "react", "react-dom"]
+  },
+  "include": [
+    "src/index.tsx",
+    "src/global.d.ts",
+    "src/data.ts",
+    "src/cuber/**/*",
+    "src/common/**/*",
+    "src/solver/**/*",
+    "src/cv/**/*",
+    "src/vue/Viewport/toucher.ts",
+    "src/vue/Playground/rubic.ts",
+    "src/vue/Algs/algs.json"
+  ],
+  "exclude": ["node_modules"],
+  "compileOnSave": false
+}

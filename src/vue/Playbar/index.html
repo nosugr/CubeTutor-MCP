@@ -1,0 +1,26 @@
+<v-layout row wrap>
+  <v-flex xs12
+    :style="{'padding-left': size / 2 + 'px','padding-right': size / 2 + 'px','padding-top': size * 0.2 + 'px','font-size':(size * 0.3)+'px','min-height':size+'px'}">
+    <v-slider style="margin: 0%;padding: 0%;" hide-details :thumb-label="progress!=0?'always':false" show-ticks="always"
+      v-model="progress" :max="actions.length" :thumb-size="size * 0.6">
+      <template v-slot:thumb-label>{{progress==0?'#':actions[progress - 1].value}}</template>
+    </v-slider>
+  </v-flex>
+  <v-flex xs12 style="display: flex;" :style="{'padding-left': size / 4 + 'px','padding-right': size / 4 + 'px'}">
+    <v-btn :style="style" text large :disabled="disable || (progress==0 && !chaos)" @click="init">
+      <v-icon :size="size * 0.8">skip_previous</v-icon>
+    </v-btn>
+    <v-btn :style="style" text large :disabled="disable || progress==0 || chaos" @click="backward">
+      <v-icon :size="size * 0.8">fast_rewind</v-icon>
+    </v-btn>
+    <v-btn :style="style" text large :disabled="disable || progress == actions.length || chaos" @click="toggle">
+      <v-icon :size="size * 0.8">{{playing?'pause':'play_arrow'}}</v-icon>
+    </v-btn>
+    <v-btn :style="style" text large :disabled="disable || progress == actions.length || chaos" @click="forward">
+      <v-icon :size="size * 0.8">fast_forward</v-icon>
+    </v-btn>
+    <v-btn :style="style" text large :disabled="disable || (progress==actions.length) || chaos" @click="finish">
+      <v-icon :size="size * 0.8">skip_next</v-icon>
+    </v-btn>
+  </v-flex>
+</v-layout>

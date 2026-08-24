@@ -1,0 +1,39 @@
+{
+  "name": "cubetutor",
+  "description": "Smart Rubik's Cube platform using TypeScript, React, Vite and Three.js.",
+  "version": "1.0.0",
+  "author": "CubeTutor",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"python -m uvicorn --app-dir server api.http_app:app --port 8000\" \"vite --host 0.0.0.0\"",
+    "dev": "vite --host 0.0.0.0",
+    "watch": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "npm run build && vite preview"
+  },
+  "dependencies": {
+    "clipboard": "^2.0.11",
+    "lucide-react": "^1.16.0",
+    "onnxruntime-web": "^1.27.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.170.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^10.0.5",
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "wrangler": "^3.0.0"
+  },
+  "prettier": {
+    "printWidth": 120
+  }
+}

@@ -1,0 +1,24 @@
+# Node.js & Vite Frontend
+node_modules/
+.npm-cache/
+dist/
+vite-dev.*
+.vscode/
+.idea/
+
+# Python Backend & Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Solver Precomputed Tables & Cache
+server/.twophase_cache/
+server/solvers/kociemba/tables/*
+!server/solvers/kociemba/tables/README.md
+
+# OS & Temporary Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,5 @@
+path: C:\Users\wjc09\Desktop\cube\cuber\cuber-server\datasets\cube
+train: images/train
+val: images/val
+names:
+  0: cube_face

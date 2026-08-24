@@ -1,0 +1,78 @@
+<v-app>
+  <div v-resize="resize" style="user-select: none; touch-action: none;">
+    <setting ref="setting"></setting>
+    <v-btn
+      fixed
+      left
+      top
+      text
+      color="primary"
+      style="user-select: none; margin: 0%; padding: 0%;"
+      :style="{width:size+'px', height:size+'px', 'margin-left': width / 2 - Math.min(size*4, width/2 - size/4) + 'px'}"
+      @click="script"
+    >
+      <v-icon :size="size * 0.7">assignment</v-icon>
+    </v-btn>
+    <viewport ref="viewport"></viewport>
+    <v-container
+      fluid
+      grid-list-md
+      text-xs-center
+      :style="{width:Math.min(size * 8, width) + 'px', height:size * 2.6 + 'px'}"
+      style="padding: 0%; touch-action: none;"
+    >
+      <playbar ref="playbar"></playbar>
+    </v-container>
+  </div>
+  <v-dialog v-model="scriptd" :width="Math.min(size * 8, width)">
+    <v-card>
+      <v-card-title style="text-transform: none;">
+        <div :style="{'font-size':size * 0.4+'px'}">
+          场景:
+        </div>
+      </v-card-title>
+      <v-card-text style="text-transform: none; padding-bottom: 0%;">
+        <v-textarea
+          :style="{'font-size':size / 3 + 'px', 'line-height':size / 2 + 'px'}"
+          rows="2"
+          no-resize
+          solo
+          flat
+          outlined
+          hide-details
+          readonly
+          v-model="scene"
+        >
+        </v-textarea>
+      </v-card-text>
+      <v-card-title style="text-transform: none;">
+        <div :style="{'font-size':size * 0.4+'px'}">
+          动作:
+        </div>
+      </v-card-title>
+      <v-card-text style="text-transform: none;">
+        <v-textarea
+          :style="{'font-size':size / 3 + 'px', 'line-height':size / 2 + 'px'}"
+          rows="8"
+          no-resize
+          solo
+          flat
+          outlined
+          hide-details
+          readonly
+          v-model="action"
+        >
+        </v-textarea>
+      </v-card-text>
+      <v-card-actions>
+        <v-layout row wrap style="margin: 0%;">
+          <v-flex xs12 d-flex>
+            <v-btn block text @click="scriptd = false;" :height="size * 0.8">
+              <div :style="{'font-size':size/3+'px'}">确定</div>
+            </v-btn>
+          </v-flex>
+        </v-layout>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</v-app>

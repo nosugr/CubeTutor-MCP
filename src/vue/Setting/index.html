@@ -1,0 +1,52 @@
+<div v-resize="resize">
+  <v-btn fixed right top fab color="primary" style="user-select: none;"
+    :style="{width:size * 0.9+'px', height:size * 0.9+'px', 'margin-right': width / 2 - Math.min(size*4, width/2) + 'px'}"
+    @click="menu=!menu">
+    <v-icon :size="size * 0.6">menu</v-icon>
+  </v-btn>
+  <order :value="items['order'].value" @input="items['order'].value = $event" v-on:order="$emit('order');"></order>
+  <appear :value="items['appear'].value" @input="items['appear'].value = $event"></appear>
+  <camera :value="items['camera'].value" @input="items['camera'].value = $event"></camera>
+  <control :value="items['control'].value" @input="items['control'].value = $event"></control>
+  <palette :value="items['palette'].value" @input="items['palette'].value = $event"></palette>
+  <about :value="items['about'].value" @input="items['about'].value = $event"></about>
+  <v-bottom-sheet v-model="menu">
+    <v-card text style="margin: auto;">
+      <v-container fluid grid-list-md text-xs-center :style="{width:Math.min(size * 8, width) + 'px'}">
+        <v-layout row wrap style="padding-top: 2%; padding-bottom: 5%;">
+          <v-flex xs12 style="display: flex;">
+            <v-btn :color="mode == 'playground'?'primary':''" depressed
+              style="text-transform: none; min-width: 0%; min-height: 0%; margin: 0%; padding: 0%; flex: 1;"
+              @click="tap('playground')" :style="{height: size + 'px'}">
+              <v-icon :size="size * 0.8">games</v-icon>
+            </v-btn>
+            <v-btn :color="mode == 'helper'?'primary':''" depressed
+              style="text-transform: none; min-width: 0%; min-height: 0%; margin: 0%; padding: 0%; flex: 1;"
+              @click="tap('helper')" :style="{height: size + 'px'}">
+              <v-icon :size="size * 0.8">assistant</v-icon>
+            </v-btn>
+            <v-btn :color="mode == 'algs'?'primary':''" depressed
+              style="text-transform: none; min-width: 0%; min-height: 0%; margin: 0%; padding: 0%; flex: 1;"
+              @click="tap('algs')" :style="{height: size + 'px'}">
+              <v-icon :size="size * 0.8">school</v-icon>
+            </v-btn>
+            <v-btn :color="mode == 'director'?'primary':''" depressed
+              style="text-transform: none; min-width: 0%; min-height: 0%; margin: 0%; padding: 0%; flex: 1;"
+              @click="tap('director')" :style="{height: size + 'px'}">
+              <v-icon :size="size * 0.8">movie</v-icon>
+            </v-btn>
+          </v-flex>
+        </v-layout>
+        <v-layout row wrap style="padding-bottom: 5%;">
+          <v-flex v-for="(item, i) of items" v-show="item.show" :key="item.label" xs6 class="text-center"
+            :style="{'padding-left': size/5 + 'px', 'padding-right': size/5 + 'px', 'padding-bottom': size/5 + 'px'}">
+            <v-btn rounded depressed block :disabled="item.disable" @click="tap(item)"
+              style="text-transform: none; min-width: 0%; flex: 1;" :height="size * 0.8"
+              :style="{'font-size':size / 3 + 'px'}">{{item.label}}
+            </v-btn>
+          </v-flex>
+        </v-layout>
+      </v-container>
+    </v-card>
+  </v-bottom-sheet>
+</div>
