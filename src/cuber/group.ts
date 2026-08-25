@@ -86,6 +86,12 @@ export default class CubeGroup extends THREE.Group {
     return 0;
   }
 
+  reset(): void {
+    if (this.holding) {
+      this.drop();
+    }
+  }
+
   finish(): number {
     if (this.tween) {
       const angle = this.tween.end - this.angle;

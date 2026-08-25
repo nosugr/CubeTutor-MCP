@@ -264,9 +264,8 @@ export default class Twister {
   }
 
   finish(): void {
-    while (this.queue.length > 0) {
-      tweener.finish();
-    }
+    this.queue = [];
+    this.redoList = [];
     tweener.finish();
   }
 

@@ -44,16 +44,18 @@ import {
   Trash2,
   Wand2,
   X,
+  Zap,
 } from "lucide-react";
 import * as THREE from "three";
 import "./index.css";
 import World from "./cuber/world";
+import CubeGroup from "./cuber/group";
 import Cubelet from "./cuber/cubelet";
 import { COLORS, FACE } from "./cuber/define";
 import { PaletteData, PreferanceData } from "./data";
 import { TwistAction, TwistNode } from "./cuber/twister";
 import Toucher from "./vue/Viewport/toucher";
-import Solver, { SolveMethod, SolveResult } from "./solver/Solver";
+import Solver, { type SolveMethod, type SolveResult, type SolveStep, type SolvePhaseInfo } from "./solver/Solver";
 import {
   FACE_COLORS,
   FACE_ENUM,
@@ -419,7 +421,7 @@ function SettingsPanel({
           )}
         </div>
       </Modal>
-      <Modal title="Cuber 使用帮助" open={helpOpen} onClose={() => setHelpOpen(false)} className="help-modal">
+      <Modal title="CubeTutor 使用帮助" open={helpOpen} onClose={() => setHelpOpen(false)} className="help-modal">
         <div className="help-modal-body">
           <HelpContent compact />
           <div className="danger-zone">
@@ -1043,6 +1045,15 @@ async function detectViaBackend(
   }
 }
 
+const FACE_NAMES_CN: Record<FaceKey, string> = {
+  U: "顶面",
+  R: "右面",
+  F: "前面",
+  D: "底面",
+  L: "左面",
+  B: "后面",
+};
+
 function ScannerPanel({
   open,
   onClose,
@@ -1069,15 +1080,10 @@ function ScannerPanel({
   const lastKeyRef = useRef("");
   const lastPromptRef = useRef("");
   const regionRef = useRef<Region | null>(null);
-  // 前置摄像头时在绘制阶段水平翻转视频帧（而非 CSS 镜像），
-  // 使叠加层文字正常、检测坐标与用户视角一致
   const mirroredRef = useRef(false);
-  // 连续两次检测分布一致时，把该分布“锁定”在一旁，
-  // 便于手持魔方时松手后再按采集键，无需稳住同时按键
   const [locked, setLocked] = useState<{ grid: FaceKey[]; face: FaceKey } | null>(null);
   const lockedRef = useRef<{ grid: FaceKey[]; face: FaceKey; rawKey: string } | null>(null);
   const prevDetectKeyRef = useRef("");
-  // 最近一次后端失败消息（success=false 时的 message），用于在 prompt 中直接显示
   const lastFailMsgRef = useRef<string>("");
   capturedRef.current = captured;
   targetRef.current = target;
@@ -1099,7 +1105,6 @@ function ScannerPanel({
       prevDetectKeyRef.current = "";
       lastFailMsgRef.current = "";
       setLocked(null);
-      // 自动连接后端检测服务，无需手动点击
       setBackendStatus("正在连接…");
       fetch("/health")
         .then((resp) => {
@@ -1119,42 +1124,42 @@ function ScannerPanel({
   }, [open]);
 
   const doneCount = FACE_KEYS.filter((k) => captured[k]).length;
+  const currentTarget: FaceKey = target ?? (FACE_KEYS.find((k) => !captured[k]) ?? "U");
 
   const drawCellOverlay = (gctx: CanvasRenderingContext2D, region: Region | null, grid: FaceKey[] | null) => {
     if (!region) {
-      // 未检测到魔方：显示一个灰色引导框
-      gctx.strokeStyle = "rgba(200,200,200,0.35)";
+      gctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
       gctx.lineWidth = 2;
-      gctx.setLineDash([8, 6]);
-      const gx = canvasRef.current!.width * 0.2;
-      const gy = canvasRef.current!.height * 0.2;
-      const gw = canvasRef.current!.width * 0.6;
-      const gh = canvasRef.current!.height * 0.6;
-      gctx.strokeRect(gx, gy, gw, gh);
+      gctx.setLineDash([10, 8]);
+      const w = canvasRef.current!.width;
+      const h = canvasRef.current!.height;
+      const side = Math.min(w, h) * 0.65;
+      const gx = (w - side) / 2;
+      const gy = (h - side) / 2;
+      gctx.strokeRect(gx, gy, side, side);
       gctx.setLineDash([]);
       return;
     }
-    // 检测到魔方：绿色轮廓 + 3x3 网格
     gctx.lineWidth = 3;
-    gctx.strokeStyle = "rgba(34,197,94,0.95)";
+    gctx.strokeStyle = "#22c55e";
     gctx.strokeRect(region.x, region.y, region.w, region.h);
     if (grid) {
       const n = 3;
       const cw = region.w / n;
       const ch = region.h / n;
-      gctx.lineWidth = 1;
-      gctx.strokeStyle = "rgba(255,255,255,0.5)";
+      gctx.lineWidth = 1.5;
+      gctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
       for (let r = 0; r < n; r++) {
         for (let c = 0; c < n; c++) {
           const x = region.x + c * cw;
           const y = region.y + r * ch;
           gctx.strokeRect(x, y, cw, ch);
           const letter = grid[r * n + c];
-          const fs = Math.max(10, Math.round(Math.min(cw, ch) * 0.35));
+          const fs = Math.max(12, Math.round(Math.min(cw, ch) * 0.38));
           gctx.font = `bold ${fs}px sans-serif`;
           gctx.textAlign = "center";
           gctx.textBaseline = "middle";
-          gctx.fillStyle = "rgba(0,0,0,0.65)";
+          gctx.fillStyle = "rgba(0,0,0,0.7)";
           gctx.fillText(letter, x + cw / 2 + 1, y + ch / 2 + 1);
           gctx.fillStyle = "#fff";
           gctx.fillText(letter, x + cw / 2, y + ch / 2);
@@ -1170,7 +1175,6 @@ function ScannerPanel({
     if (!video || !canvas) return;
     const gctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!gctx) return;
-    // 进入/重新进入采集阶段时清空旧锁定，避免沿用上一面的结果
     lockedRef.current = null;
     prevDetectKeyRef.current = "";
     setLocked(null);
@@ -1179,15 +1183,11 @@ function ScannerPanel({
     let sized = false;
     let detecting = false;
     let lastDetectAt = 0;
-    const DETECT_INTERVAL = 400;
+    const DETECT_INTERVAL = 350;
 
-    // 独立的送检画布：只绘制视频帧，避免叠加层文字污染颜色采样
     const detCanvas = document.createElement("canvas");
     const detCtx = detCanvas.getContext("2d", { willReadFrequently: true });
 
-    // 绘制视频帧：前置摄像头水平翻转，使画面方向与用户动作一致。
-    // 预览与送检均使用此函数，后端返回的 bbox/grid 即用户视角坐标，
-    // 叠加层文字无需镜像、采集结果可直接放入 2D 展开图
     const drawVideoFrame = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
       if (mirroredRef.current) {
         ctx.save();
@@ -1224,8 +1224,6 @@ function ScannerPanel({
               regionRef.current = region;
               const face = identifyFace(grid);
               const key = grid.join("");
-              // 连续两次检测分布一致 → 锁定该分布在一旁
-              // （锁定的是镜像后可直接存入展开图的 grid，便于松手后按采集键录入）
               if (key === prevDetectKeyRef.current && (!lockedRef.current || lockedRef.current.rawKey !== key)) {
                 const displayGrid = mirroredRef.current ? mirrorGrid(grid) : [...grid];
                 const lface = targetRef.current ?? face;
@@ -1234,34 +1232,27 @@ function ScannerPanel({
               }
               prevDetectKeyRef.current = key;
               if (lockedRef.current) {
-                nextPrompt = targetRef.current
-                  ? `已锁定 ${targetRef.current} 面分布，可松开魔方后点击"采集锁定"录入`
-                  : `已锁定 ${lockedRef.current.face} 面分布，可松开魔方后点击"采集锁定"录入（已完成 ${capturedCount(capturedRef.current)}/6）`;
+                nextPrompt = `✨ 已稳定锁定 ${lockedRef.current.face} 面，可按空格键或点击“采集此面”`;
               } else {
-                nextPrompt = targetRef.current
-                  ? `目标面 ${targetRef.current}（${FACE_ORIENTATION_HINTS[targetRef.current]}）：当前识别中心为 ${face}。对准后点击采集。`
-                  : `检测到魔方面 ${face}（${FACE_ORIENTATION_HINTS[face]}，已完成 ${capturedCount(capturedRef.current)}/6）。对准后点击采集。`;
+                nextPrompt = `✅ 检测到 ${face} 面（${FACE_ORIENTATION_HINTS[face]}）。已对准，可点击采集。`;
               }
             }
           } else if (result && !result.success) {
-            // 后端返回失败：记录 message，后续在 prompt 中显示
             lastFailMsgRef.current = result.message || "未检测到魔方";
           }
         }
         if (!nextPrompt) {
           liveGridRef.current = [];
           regionRef.current = null;
-          // 检测丢失时重置连续计数，但保留已锁定分布：用户可放下魔方后再采集
           prevDetectKeyRef.current = "";
           if (lockedRef.current) {
-            nextPrompt = `已锁定 ${lockedRef.current.face} 面分布，可松开魔方后点击"采集锁定"录入`;
+            nextPrompt = `✨ 已锁定 ${lockedRef.current.face} 面，可直接按空格或点击采集`;
           } else if (!backendConnected) {
-            nextPrompt = "未连接检测服务，请确认后端已启动后返回重试";
+            nextPrompt = "未连接检测服务，请确认后端已启动";
           } else if (lastFailMsgRef.current) {
-            // 后端返回失败：直接显示后端的 message，便于排查
-            nextPrompt = `检测失败：${lastFailMsgRef.current}`;
+            nextPrompt = `正在搜索：${lastFailMsgRef.current}`;
           } else {
-            nextPrompt = "正在搜索魔方…请将魔方一个面朝向镜头";
+            nextPrompt = "正在寻找魔方…请将魔方平稳对准虚线框";
           }
         }
         const key = liveGridRef.current.join("");
@@ -1274,7 +1265,7 @@ function ScannerPanel({
           setPrompt(nextPrompt);
         }
       } catch {
-        // 检测出错时保持上一帧
+        // keep last frame
       } finally {
         detecting = false;
       }
@@ -1285,7 +1276,7 @@ function ScannerPanel({
       if (video.readyState >= 2 && video.videoWidth) {
         if (!sized) {
           const long = Math.max(video.videoWidth, video.videoHeight);
-          const scale = long > 480 ? 480 / long : 1;
+          const scale = long > 640 ? 640 / long : 1;
           canvas.width = Math.round(video.videoWidth * scale);
           canvas.height = Math.round(video.videoHeight * scale);
           detCanvas.width = canvas.width;
@@ -1293,7 +1284,6 @@ function ScannerPanel({
           sized = true;
         }
         drawVideoFrame(gctx, canvas.width, canvas.height);
-        // 每帧根据最新检测结果重绘叠加层，检测异步执行且限频，不阻塞渲染
         const region = regionRef.current;
         const grid = liveGridRef.current;
         const hasResult = region && grid.length === 9;
@@ -1304,10 +1294,10 @@ function ScannerPanel({
       }
       raf = requestAnimationFrame(loop);
     };
+
     startCamera(video)
       .then((s) => {
         streamRef.current = s;
-        // 前置摄像头（user 或未报告朝向）在绘制阶段水平翻转视频帧，后置保持原始画面
         const facing = s.getVideoTracks()[0]?.getSettings?.().facingMode;
         mirroredRef.current = facing !== "environment";
         raf = requestAnimationFrame(loop);
@@ -1316,16 +1306,13 @@ function ScannerPanel({
         const msg = e instanceof Error ? e.message : String(e);
         let hint = "";
         if (msg.includes("Could not start video source")) {
-          hint = "（摄像头可能被其他程序占用，或浏览器未授权。请关闭占用程序后重试。）";
+          hint = "（摄像头可能被其他程序占用，或浏览器未授权。）";
         } else if (msg.includes("NotAllowedError") || msg.includes("Permission")) {
-          hint = "（摄像头权限被拒绝。请在浏览器地址栏点击允许，或清除站点权限后重试。）";
-        } else if (msg.includes("NotFoundError") || msg.includes("Requested device")) {
-          hint = "（未检测到摄像头设备。）";
-        } else if (msg.includes("NotReadableError")) {
-          hint = "（摄像头被其他程序占用。）";
+          hint = "（摄像头权限被拒绝。请在浏览器地址栏点击允许。）";
         }
         setError("无法访问摄像头：" + msg + hint);
       });
+
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
@@ -1339,8 +1326,6 @@ function ScannerPanel({
     const lk = lockedRef.current;
     let grid: FaceKey[];
     let face: FaceKey;
-    // 优先使用已锁定的分布（已镜像、可直接存入展开图）；
-    // 否则取实时检测结果，并按前置摄像头镜像还原魔方真实朝向
     if (lk) {
       grid = [...lk.grid];
       face = lk.face;
@@ -1354,23 +1339,33 @@ function ScannerPanel({
     const next = { ...capturedRef.current };
     next[face] = grid;
     setCaptured(next);
-    const identified = identifyFace(grid);
-    const onTop = ON_TOP_FACE[face];
-    const msg = targetRef.current && identified !== targetRef.current
-      ? `已录入 ${face} 面（中心识别为 ${identified}，请确认朝向）`
-      : `已录入 ${face} 面（${FACE_COLORS[face]}色面正对镜头，${FACE_COLORS[onTop]}色面朝上，可在展开图中旋转校正）`;
+    const count = capturedCount(next);
+    const msg = `已录入 ${face} 面 (${FACE_NAMES_CN[face]})，已完成 ${count}/6 面`;
     lastPromptRef.current = msg;
     setPrompt(msg);
-    // 录入后重置连续计数，准备下一面；若使用了锁定则一并清除
     prevDetectKeyRef.current = "";
     if (lk) {
       lockedRef.current = null;
       setLocked(null);
     }
-    setTarget(null);
+    const nextUnscanned = FACE_KEYS.find((k) => k !== face && !next[k]) ?? null;
+    setTarget(nextUnscanned);
   };
 
-  // 主动清除当前锁定（分布陈旧或不想使用时）
+  useEffect(() => {
+    if (!open || phase !== "capture") return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (liveGridRef.current.length === 9 || lockedRef.current) {
+          capture();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, phase]);
+
   const clearLock = () => {
     lockedRef.current = null;
     prevDetectKeyRef.current = "";
@@ -1390,7 +1385,6 @@ function ScannerPanel({
     setPhase("capture");
   };
 
-  // 手动校正：点击贴纸循环切换颜色（U→R→F→D→L→B）
   const editCell = (face: FaceKey, index: number) => {
     setCaptured((prev) => {
       const g = prev[face];
@@ -1415,89 +1409,197 @@ function ScannerPanel({
   const validation = phase === "review" ? validateState(captured) : null;
 
   return (
-    <Modal title="摄像头录入魔方状态" open={open} onClose={onClose} className="scanner-modal">
+    <Modal title="AI 视觉魔方状态录入" open={open} onClose={onClose} className="scanner-modal">
       <video ref={videoRef} className="scanner-video-hidden" playsInline muted />
       {error && <div className="scanner-error">{error}</div>}
+
       {phase === "intro" && (
         <div className="scanner-intro">
-          <p>通过摄像头自动识别魔方颜色并录入到 3D 魔方。请允许浏览器使用摄像头。</p>
-
-          <div className="option-group">
-            <strong>检测服务</strong>
-            <div className="backend-connect">
-              <span className={backendConnected ? "status-ok" : "status-warn"}>
-                {backendStatus}
-              </span>
-            </div>
-            <small className="hint">
-              打开后自动连接检测服务。若显示"无法连接"，请启动后端服务：
-              <code>cd cuber-server && pip install -r requirements.txt && python main.py</code>
-            </small>
-          </div>
+          <p>
+            通过摄像头智能识别实体魔方的 6 面颜色分布，将真实物理魔方状态实时同步至 3D 仿真模型，便于进行 AI 辅助教学与算法求解。
+          </p>
 
           <ul className="scanner-tips">
-            <li>点击"开始录入"后，将魔方一个面正对镜头即可自动识别。</li>
-            <li>按提示依次采集 6 个面，光线均匀、背景简洁时识别更稳定。</li>
+            <li>点击“开始录入”后，将实体魔方的各个面逐一正对镜头。</li>
+            <li>系统将自动识别当前面的 3×3 九格颜色分布，按提示依次完成 6 个面的采集。</li>
+            <li>在光线均匀、背景简洁的环境下识别更加稳定准确。</li>
+            <li>录入完成后可在 2D 展开图中进行颜色微调与朝向校正，确认无误即可一键同步至 3D 舞台。</li>
           </ul>
-          <div className="modal-actions">
-            <button onClick={onClose}>取消</button>
-            <button className="primary" onClick={() => setPhase("capture")}>开始录入</button>
+          <div className="modal-actions" style={{ justifyContent: "flex-end", marginTop: "16px" }}>
+            <button type="button" onClick={onClose}>取消</button>
+            <button type="button" className="btn-capture-main" onClick={() => setPhase("capture")}>
+              <Camera size={16} />
+              <span>开始录入</span>
+            </button>
           </div>
         </div>
       )}
+
       {phase === "capture" && (
         <div className="scanner-capture">
-          <div className="scanner-stage">
-            <canvas ref={canvasRef} className="scanner-canvas" />
-          </div>
-          <div className="scanner-prompt">{prompt || "正在启动摄像头…"}</div>
-          <div className="scanner-chips">
-            {FACE_KEYS.map((k) => (
-              <span key={k} className={`scanner-chip ${captured[k] ? "done" : ""}`} style={{ background: captured[k] ? FACE_COLORS[k] : undefined }}>
-                {k}
-              </span>
-            ))}
-          </div>
-          {locked && (
-            <div className="scanner-locked">
-              <div className="face-grid">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div key={i} className="face-grid-cell" style={{ background: FACE_COLORS[locked.grid[i]] }} />
-                ))}
-              </div>
-              <div className="scanner-locked-info">
-                <span className="scanner-locked-badge">已锁定 {locked.face} 面</span>
-                <span className="scanner-locked-hint">分布已保存，可松开魔方后点"采集锁定"录入</span>
-                <button type="button" className="scanner-locked-clear" onClick={clearLock}>清除锁定</button>
-              </div>
-            </div>
-          )}
-          {target && <div className="scanner-target">目标面：{target}（{FACE_ORIENTATION_HINTS[target]}）</div>}
-          <div className="scanner-orientation-rules">
-            <div className="scanner-orientation-title">面朝向规则（正对镜头 → 朝上）</div>
-            <div className="scanner-orientation-list">
-              {FACE_KEYS.map((k) => {
-                const onTop = ON_TOP_FACE[k];
-                return (
-                  <div key={k} className={`scanner-orientation-row ${target === k ? "active" : ""}`}>
-                    <span className="face-letter" style={{ background: FACE_COLORS[k], color: contrastColor(FACE_COLORS[k]) }}>{k}</span>
-                    <span className="arrow">→</span>
-                    <span className="face-letter" style={{ background: FACE_COLORS[onTop], color: contrastColor(FACE_COLORS[onTop]) }}>{onTop}</span>
+          {/* 顶部 6 面状态导航与切换卡片 */}
+          <div className="scanner-face-tabs">
+            {FACE_KEYS.map((k) => {
+              const isDone = !!captured[k];
+              const isTarget = currentTarget === k;
+              const g = captured[k];
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  className={`scanner-face-card ${isDone ? "done" : ""} ${isTarget ? "active" : ""}`}
+                  onClick={() => setTarget(k)}
+                  title={`点击切换录入：${k} 面 (${FACE_NAMES_CN[k]})`}
+                >
+                  <div className="face-card-header">
+                    <span
+                      className="face-card-tag"
+                      style={{ background: FACE_COLORS[k], color: contrastColor(FACE_COLORS[k]) }}
+                    >
+                      {k}
+                    </span>
+                    <span className="face-card-name">{FACE_NAMES_CN[k]}</span>
+                    {isDone && <Check size={14} className="face-card-check" />}
                   </div>
-                );
-              })}
+                  <div className="face-card-mini-grid">
+                    {Array.from({ length: 9 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="mini-grid-dot"
+                        style={{ background: g ? FACE_COLORS[g[i]] : "rgba(0,0,0,0.06)" }}
+                      />
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 主摄取与实时预览分栏区域 */}
+          <div className="scanner-capture-body">
+            <div className="scanner-stage-wrap">
+              <div className="scanner-stage">
+                <canvas ref={canvasRef} className="scanner-canvas" />
+                <div className="hud-corner top-left" />
+                <div className="hud-corner top-right" />
+                <div className="hud-corner bottom-left" />
+                <div className="hud-corner bottom-right" />
+                <div className="scanner-hud-hint">
+                  <span
+                    className="hud-target-pill"
+                    style={{ background: FACE_COLORS[currentTarget], color: contrastColor(FACE_COLORS[currentTarget]) }}
+                  >
+                    当前目标：{currentTarget} 面 ({FACE_NAMES_CN[currentTarget]})
+                  </span>
+                  <span className="hud-target-desc">👆 保持【{ON_TOP_FACE[currentTarget]} 面 ({FACE_NAMES_CN[ON_TOP_FACE[currentTarget]]})】朝上</span>
+                </div>
+              </div>
+              <div className="scanner-prompt-bar">
+                <Sparkles size={16} className="prompt-icon" />
+                <span>{prompt || "正在启动摄像头…"}</span>
+              </div>
+            </div>
+
+            <div className="scanner-sidebar">
+              <div className="scanner-live-card">
+                <div className="live-card-title">
+                  <span>实时识别采样</span>
+                  {liveReady ? <span className="live-badge ok">● 识别正常</span> : <span className="live-badge wait">○ 寻找魔方</span>}
+                </div>
+                <div className="live-grid-display">
+                  {Array.from({ length: 9 }).map((_, i) => {
+                    const c = (locked ? locked.grid[i] : (liveGridRef.current.length === 9 ? (mirroredRef.current ? mirrorGrid(liveGridRef.current)[i] : liveGridRef.current[i]) : null));
+                    return (
+                      <div
+                        key={i}
+                        className="live-cell"
+                        style={{ background: c ? FACE_COLORS[c] : "rgba(0,0,0,0.05)" }}
+                      >
+                        {c && <span className="cell-letter" style={{ color: contrastColor(FACE_COLORS[c]) }}>{c}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="live-center-info">
+                  <span>中心块：</span>
+                  <strong>
+                    {liveGridRef.current[4] ? `${liveGridRef.current[4]} 面 (${FACE_NAMES_CN[liveGridRef.current[4]] || ""})` : "未就绪"}
+                  </strong>
+                </div>
+              </div>
+
+              {locked && (
+                <div className="scanner-locked-box">
+                  <div className="locked-header">
+                    <span className="locked-tag">✨ 已锁定 {locked.face} 面</span>
+                    <button type="button" className="locked-clear-btn" onClick={clearLock}>重新检测</button>
+                  </div>
+                  <p className="locked-tip">图案已自动稳定，可松手直接点击“采集”或按空格</p>
+                </div>
+              )}
+
+              <div className="scanner-quick-tips">
+                <div className="tip-item">
+                  <span className="tip-key">⚡ 快捷录入：</span>
+                  <span>对准稳定后按 <strong>空格键 (Space)</strong> 快速完成采集</span>
+                </div>
+                <div className="tip-item">
+                  <span className="tip-key">📐 朝向指引：</span>
+                  <span>{FACE_ORIENTATION_HINTS[currentTarget]}</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="modal-actions scanner-actions">
-            <button onClick={() => { setTarget(null); setPhase("intro"); }}>返回</button>
-            <button disabled={!liveReady && !locked} onClick={capture}>{locked ? "采集锁定" : "采集"}</button>
-            <button disabled={doneCount < 6} onClick={() => setPhase("review")}>完成 ({doneCount}/6)</button>
+
+          {/* 底部操作栏 */}
+          <div className="scanner-modal-footer">
+            <button type="button" onClick={() => { setTarget(null); setPhase("intro"); }}>
+              返回说明
+            </button>
+            <div className="actions-right" style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                className="btn-capture-main"
+                disabled={!liveReady && !locked}
+                onClick={capture}
+              >
+                <Camera size={16} />
+                <span>{locked ? `采集锁定 (${locked.face} 面)` : `采集此面 (${currentTarget} 面)`}</span>
+              </button>
+              <button
+                type="button"
+                className={`btn-review-main ${doneCount === 6 ? "primary" : ""}`}
+                disabled={doneCount === 0}
+                onClick={() => setPhase("review")}
+              >
+                <Check size={16} />
+                <span>{doneCount === 6 ? "全部采集完成，进入校对 ➔" : `检查展开图 (${doneCount}/6)`}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
+
       {phase === "review" && (
-        <div className="scanner-review">
-          <p>下方为识别到的 2D 展开图。点击贴纸可循环切换颜色手动校正；可旋转单面修正朝向，或重新扫描。确认与魔方一致后点击“确定涂色”。</p>
+        <div className="scanner-review-wrap">
+          <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", lineHeight: 1.6 }}>
+            下方为 6 面展开图。点击任意贴纸色块可<strong>手动循环切换颜色</strong>；点击<strong>旋转按钮</strong>可修正方向。确认与实体魔方完全一致后点击“确定涂色并同步”。
+          </p>
+
+          {/* 颜色数量统计指示条 */}
+          <div className="scanner-color-stats">
+            {FACE_KEYS.map((k) => {
+              const count = validation?.counts[k] || 0;
+              const isValid = count === 9;
+              return (
+                <div key={k} className={`color-stat-chip ${isValid ? "valid" : "invalid"}`}>
+                  <span className="color-dot" style={{ background: FACE_COLORS[k] }} />
+                  <span>{FACE_NAMES_CN[k]}: {count}/9</span>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="scanner-net">
             <div className="net-top"><FaceNet face="U" grid={captured.U} onRotate={() => rotate("U")} onRescan={() => rescan("U")} onCellClick={(i) => editCell("U", i)} /></div>
             <div className="net-row">
@@ -1507,12 +1609,21 @@ function ScannerPanel({
             </div>
             <div className="net-bottom"><FaceNet face="D" grid={captured.D} onRotate={() => rotate("D")} onRescan={() => rescan("D")} onCellClick={(i) => editCell("D", i)} /></div>
           </div>
+
           {validation && !validation.ok && (
-            <div className="scanner-warn">{validation.issues.map((s, i) => <div key={i}>· {s}</div>)}</div>
+            <div className="scanner-warn">
+              <strong style={{ display: "block", marginBottom: "4px" }}>⚠️ 状态校验提示：</strong>
+              {validation.issues.map((s, i) => <div key={i}>· {s}</div>)}
+            </div>
           )}
-          <div className="modal-actions">
-            <button onClick={() => setPhase("capture")}>继续采集</button>
-            <button className="primary" onClick={confirm}>确定涂色</button>
+
+          <div className="scanner-modal-footer" style={{ borderTop: "none", padding: "0" }}>
+            <button type="button" onClick={() => setPhase("capture")}>
+              📸 继续采集 / 补扫
+            </button>
+            <button type="button" className="btn-capture-main" onClick={confirm}>
+              🚀 确定涂色并同步至 3D 舞台
+            </button>
           </div>
         </div>
       )}
@@ -1703,6 +1814,94 @@ function MethodSelect({
   );
 }
 
+const MOVE_DESC_MAP: Record<string, string> = {
+  // 单层基本动作
+  U: "顶层 顺时针 90°",
+  "U'": "顶层 逆时针 90°",
+  U2: "顶层 旋转 180°",
+  "U2'": "顶层 旋转 180°",
+  D: "底层 顺时针 90°",
+  "D'": "底层 逆时针 90°",
+  D2: "底层 旋转 180°",
+  "D2'": "底层 旋转 180°",
+  L: "左层 顺时针 90°",
+  "L'": "左层 逆时针 90°",
+  L2: "左层 旋转 180°",
+  "L2'": "左层 旋转 180°",
+  R: "右层 顺时针 90°",
+  "R'": "右层 逆时针 90°",
+  R2: "右层 旋转 180°",
+  "R2'": "右层 旋转 180°",
+  F: "前层 顺时针 90°",
+  "F'": "前层 逆时针 90°",
+  F2: "前层 旋转 180°",
+  "F2'": "前层 旋转 180°",
+  B: "后层 顺时针 90°",
+  "B'": "后层 逆时针 90°",
+  B2: "后层 旋转 180°",
+  "B2'": "后层 旋转 180°",
+
+  // 双层动作
+  u: "顶双层 顺时针 90°",
+  "u'": "顶双层 逆时针 90°",
+  u2: "顶双层 旋转 180°",
+  d: "底双层 顺时针 90°",
+  "d'": "底双层 逆时针 90°",
+  d2: "底双层 旋转 180°",
+  l: "左双层 顺时针 90°",
+  "l'": "左双层 逆时针 90°",
+  l2: "左双层 旋转 180°",
+  r: "右双层 顺时针 90°",
+  "r'": "右双层 逆时针 90°",
+  r2: "右双层 旋转 180°",
+  f: "前双层 顺时针 90°",
+  "f'": "前双层 逆时针 90°",
+  f2: "前双层 旋转 180°",
+  b: "后双层 顺时针 90°",
+  "b'": "后双层 逆时针 90°",
+  b2: "后双层 旋转 180°",
+
+  // 中层与整体旋转
+  M: "中层 顺时针 90°",
+  "M'": "中层 逆时针 90°",
+  M2: "中层 旋转 180°",
+  E: "赤道层 顺时针 90°",
+  "E'": "赤道层 逆时针 90°",
+  E2: "赤道层 旋转 180°",
+  S: "站立层 顺时针 90°",
+  "S'": "站立层 逆时针 90°",
+  S2: "站立层 旋转 180°",
+  x: "整体 绕右面顺时针 90°",
+  "x'": "整体 绕右面逆时针 90°",
+  x2: "整体 绕右面旋转 180°",
+  y: "整体 绕顶面顺时针 90°",
+  "y'": "整体 绕顶面逆时针 90°",
+  y2: "整体 绕顶面旋转 180°",
+  z: "整体 绕前面顺时针 90°",
+  "z'": "整体 绕前面逆时针 90°",
+  z2: "整体 绕前面旋转 180°",
+};
+
+function getMoveDescription(exp: string): string {
+  if (!exp) return "";
+  if (MOVE_DESC_MAP[exp]) return MOVE_DESC_MAP[exp];
+
+  const base = exp[0];
+  const isReverse = exp.includes("'");
+  const isDouble = exp.includes("2");
+
+  const faceMap: Record<string, string> = {
+    U: "顶层", D: "底层", L: "左层", R: "右层", F: "前层", B: "后层",
+    u: "顶双层", d: "底双层", l: "左双层", r: "右双层", f: "前双层", b: "后双层",
+    M: "中层", E: "赤道层", S: "站立层",
+    x: "整体(X轴)", y: "整体(Y轴)", z: "整体(Z轴)",
+  };
+
+  const faceName = faceMap[base] || `${base}层`;
+  const action = isDouble ? "旋转 180°" : isReverse ? "逆时针 90°" : "顺时针 90°";
+  return `${faceName} ${action}`;
+}
+
 // 求解结果播放器：上方显示下一步 + 阶段进度 + 逐步点亮的解串 + Playbar
 function SolutionPlayer({
   ctx,
@@ -1719,6 +1918,7 @@ function SolutionPlayer({
 }) {
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<number>(1);
   const actions = useMemo(() => new TwistNode(result.raw).parse(), [result.raw]);
   const playingRef = useRef(false);
   const progressRef = useRef(0);
@@ -1727,15 +1927,28 @@ function SolutionPlayer({
   progressRef.current = progress;
   actionsRef.current = actions;
 
+  useEffect(() => {
+    CubeGroup.frames = Math.max(3, Math.round(30 / speed));
+    return () => {
+      CubeGroup.frames = 30;
+    };
+  }, [speed]);
+
   const init = useCallback(() => {
     ctx.world.controller.lock = false;
     playingRef.current = false;
     progressRef.current = 0;
     setPlaying(false);
     setProgress(0);
-    const setup = scene.replace("^", `(${result.raw})'`);
+    const setup = scene
+      ? scene.includes("^")
+        ? scene.replace("^", `(${result.raw})'`)
+        : scene
+      : `(${result.raw})'`;
+    ctx.world.cube.reset();
+    ctx.world.cube.strip({});
     ctx.world.cube.twister.setup(setup);
-    if (stickers) {
+    if (stickers && Object.keys(stickers).length > 0) {
       for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
         const list = stickers[FACE[face]];
         if (list) for (const sticker in list) ctx.world.cube.stick(Number(sticker), face, list[sticker]);
@@ -1774,6 +1987,14 @@ function SolutionPlayer({
   }, [ctx.world]);
 
   useEffect(init, [init]);
+  useEffect(() => {
+    return () => {
+      playingRef.current = false;
+      ctx.world.cube.twister.finish();
+      ctx.world.controller.disable = false;
+      ctx.world.controller.lock = false;
+    };
+  }, [ctx.world]);
   useEffect(() => {
     ctx.world.controller.disable = playing;
     ctx.world.controller.lock = progress > 0;
@@ -1856,6 +2077,11 @@ function SolutionPlayer({
           下一步
         </span>
         <span className={`next-token ${atEnd ? "done" : ""}`}>{nextStep ? nextStep.exp : "完成"}</span>
+        {nextStep && (
+          <span className="next-desc">
+            {getMoveDescription(nextStep.exp)}
+          </span>
+        )}
         <span className="next-phase">
           <Info />
           {nextStep ? nextStep.phaseLabel : "已复原"}
@@ -1887,7 +2113,7 @@ function SolutionPlayer({
             setProgress(value);
           }}
         />
-        <div className="toolbar">
+        <div className="toolbar solution-toolbar">
           <IconButton title="回到开始" disabled={progress === 0} onClick={init}>
             <SkipBack />
           </IconButton>
@@ -1903,15 +2129,107 @@ function SolutionPlayer({
           <IconButton title="跳到结尾" disabled={atEnd} onClick={finish}>
             <SkipForward />
           </IconButton>
+          <div className="speed-slider-wrap" title={`播放速度：${speed.toFixed(1)}x`}>
+            <Zap size={14} className="speed-icon" />
+            <input
+              type="range"
+              min={0.5}
+              max={2.5}
+              step={0.1}
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+              className="speed-slider"
+            />
+            <span className="speed-label">{speed.toFixed(1)}x</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function convertBackendSolution(
+  data: { method?: string; steps?: Array<{ move: string; stage: string; narration_key?: string }> },
+  method: SolveMethod
+): SolveResult {
+  const methodKey = (data.method || method).toLowerCase();
+  const backendSteps = data.steps || [];
+  const rawMoves = backendSteps.map((s) => s.move).join(" ");
+
+  const isCfop = methodKey === "cfop";
+  const isKociemba = methodKey === "kociemba";
+
+  const phaseList = isCfop
+    ? ["cross", "f2l", "oll", "pll"]
+    : isKociemba
+    ? ["kociemba"]
+    : [
+        "cross",
+        "first_layer_corners",
+        "second_layer",
+        "last_layer_cross",
+        "last_layer_corners_orient",
+        "last_layer_corners_perm",
+        "last_layer_edges",
+      ];
+
+  const phaseLabels = isCfop
+    ? ["1. Cross 底层十字", "2. F2L 前两层", "3. OLL 顶层朝向", "4. PLL 顶层排列"]
+    : isKociemba
+    ? ["两阶段最优求解"]
+    : [
+        "1. 底层十字",
+        "2. 底层角块",
+        "3. 中层棱块",
+        "4. 顶层十字",
+        "5. 顶层角定向",
+        "6. 顶层角位置",
+        "7. 顶层棱位置",
+      ];
+
+  const phases: SolvePhaseInfo[] = phaseLabels.map((label, idx) => ({
+    index: idx,
+    label,
+    startStep: -1,
+    endStep: 0,
+  }));
+
+  const steps: SolveStep[] = [];
+  backendSteps.forEach((s, idx) => {
+    let pIdx = phaseList.indexOf(s.stage);
+    if (pIdx === -1) pIdx = 0;
+    const pLabel = phaseLabels[pIdx] || s.stage;
+
+    steps.push({
+      exp: s.move,
+      moveIndex: idx,
+      phase: pIdx,
+      phaseLabel: pLabel,
+    });
+
+    if (phases[pIdx].startStep === -1) {
+      phases[pIdx].startStep = idx;
+    }
+    phases[pIdx].endStep = idx + 1;
+  });
+
+  phases.forEach((p) => {
+    if (p.startStep === -1) {
+      p.startStep = 0;
+      p.endStep = 0;
+    }
+  });
+
+  return {
+    method,
+    raw: rawMoves,
+    steps,
+    phases,
+  };
+}
+
 function Helper() {
   const ctx = useAppContext();
-  const solver = useMemo(() => new Solver(), []);
   const [color, setColor] = useState("R");
   const [stickers, setStickers] = useState<StickerMap>(() => JSON.parse(localStorage.getItem("helper-stickers") || "{}"));
   const [methodOpen, setMethodOpen] = useState(false);
@@ -1921,29 +2239,71 @@ function Helper() {
   const [errorText, setErrorText] = useState("");
   const [state, setState] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
+  const [solving, setSolving] = useState(false);
+
   useEffect(() => {
     ctx.world.order = 3;
-    ctx.world.controller.taps.push((index, face) => {
+    const savedScene = localStorage.getItem("helper-scene");
+    const savedStickersStr = localStorage.getItem("helper-stickers");
+
+    if (savedScene) {
+      ctx.world.cube.reset();
+      ctx.world.cube.strip({});
+      ctx.world.cube.twister.setup(savedScene);
+    } else if (savedStickersStr) {
+      try {
+        const savedStickers: StickerMap = JSON.parse(savedStickersStr);
+        if (savedStickers && Object.keys(savedStickers).length > 0) {
+          ctx.world.cube.reset();
+          ctx.world.cube.strip({});
+          for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
+            const list = savedStickers[FACE[face]];
+            if (list) {
+              for (const sticker in list) {
+                ctx.world.cube.stick(Number(sticker), face, list[sticker]);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse saved stickers:", e);
+      }
+    }
+    setState(ctx.world.cube.serialize());
+  }, [ctx.world]);
+
+  useEffect(() => {
+    ctx.world.order = 3;
+    const tapHandler = (index: number, face: number | null) => {
       if (face != null && index >= 0) {
+        ctx.world.cube.twister.finish();
         const cubelet = ctx.world.cube.cubelets[index];
+        if (!cubelet) return;
         const initial = cubelet.initial;
         const realFace = cubelet.getFace(face);
         setStickers((value) => {
           const next = { ...value, [FACE[realFace]]: { ...(value[FACE[realFace]] || {}), [initial]: color } };
+          localStorage.removeItem("helper-scene");
           localStorage.setItem("helper-stickers", JSON.stringify(next));
           ctx.world.cube.stick(initial, realFace, color);
           setState(ctx.world.cube.serialize());
           return next;
         });
       }
-    });
+    };
+    ctx.world.controller.taps.push(tapHandler);
+    return () => {
+      ctx.world.controller.taps = ctx.world.controller.taps.filter((fn) => fn !== tapHandler);
+    };
   }, [color, ctx.world]);
-  useAnimation(() => solver.init());
+
   const reset = () => {
+    ctx.world.cube.twister.finish();
     ctx.world.cube.reset();
     // 重置所有贴纸为各面默认颜色：strip({}) 会令每个贴纸 stick(face, "")
     // 恢复为该面默认材质并设为可见
     ctx.world.cube.strip({});
+    localStorage.removeItem("helper-scene");
     const next: StickerMap = {};
     for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
       const key = FACE[face];
@@ -1955,28 +2315,76 @@ function Helper() {
     localStorage.setItem("helper-stickers", JSON.stringify(next));
     setState(ctx.world.cube.serialize());
   };
+
   const clear = () => {
+    ctx.world.cube.twister.finish();
     setStickers({});
     localStorage.removeItem("helper-stickers");
+    localStorage.removeItem("helper-scene");
+    ctx.world.cube.reset();
     ctx.world.cube.strip({});
     setState(ctx.world.cube.serialize());
   };
-  const runSolve = (method: SolveMethod) => {
-    const ret = solver.solvePhased(ctx.world.cube.serialize(), method);
-    setMethodOpen(false);
-    if (ret.error) {
-      setErrorText(ret.error);
-      setResult(null);
-      return;
-    }
-    setErrorText("");
-    setResultScene(ctx.world.cube.history.exp);
-    setResult(ret);
+
+  const scramble = () => {
+    ctx.world.cube.twister.finish();
+    ctx.world.cube.reset();
+    ctx.world.cube.strip({});
+    setStickers({});
+    localStorage.removeItem("helper-stickers");
+    const exp = ctx.world.cube.twister.scrambler();
+    ctx.world.cube.twister.setup(exp);
+    localStorage.setItem("helper-scene", exp);
+    setState(ctx.world.cube.serialize());
   };
+
+  const runSolve = async (method: SolveMethod) => {
+    const currentState = ctx.world.cube.serialize();
+    setMethodOpen(false);
+    setSolving(true);
+    try {
+      // 直接调用后端 Python 三大求解算法接口（/api/solve）
+      const resp = await fetch("/api/solve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method,
+          facelets: currentState,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => ({}));
+        const detail = errJson.detail || `后端求解错误 (${resp.status})`;
+        throw new Error(detail);
+      }
+
+      const data = await resp.json();
+      const ret = convertBackendSolution(data, method);
+      if (ret.steps.length === 0 && currentState !== "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB") {
+        throw new Error("后端未返回有效还原步骤，请检查魔方贴纸颜色是否完整合法。");
+      }
+
+      setErrorText("");
+      const sceneToPlay = ctx.world.cube.history.init || ctx.world.cube.history.exp || `(${ret.raw})'`;
+      setResultScene(sceneToPlay);
+      setResult(ret);
+    } catch (err: any) {
+      console.error("调用后端求解服务失败:", err);
+      setErrorText(err?.message || "后端求解请求失败，请确保后端服务（FastAPI localhost:8000）已正常启动。");
+      setResult(null);
+    } finally {
+      setSolving(false);
+    }
+  };
+
   const exitPlayer = () => {
-    // 退出播放：恢复录入态（重置动作历史，回到求解前的贴纸状态）
+    // 退出播放：恢复录入态（重置动作历史，回到求解前的打乱/贴纸状态）
+    ctx.world.cube.twister.finish();
+    ctx.world.cube.reset();
+    ctx.world.cube.strip({});
     ctx.world.cube.twister.setup(resultScene);
-    if (stickers) {
+    if (stickers && Object.keys(stickers).length > 0) {
       for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
         const list = stickers[FACE[face]];
         if (list) for (const sticker in list) ctx.world.cube.stick(Number(sticker), face, list[sticker]);
@@ -1984,7 +2392,9 @@ function Helper() {
     }
     setResult(null);
   };
+
   const applyScan = (faces: Record<FaceKey, FaceKey[]>) => {
+    localStorage.removeItem("helper-scene");
     const next: StickerMap = { ...stickers };
     for (const fk of FACE_KEYS) {
       const grid = faces[fk];
@@ -2004,6 +2414,7 @@ function Helper() {
     setState(ctx.world.cube.serialize());
     setScanOpen(false);
   };
+
   const counts = [...state].reduce<Record<string, number>>((acc, item) => ({ ...acc, [item]: (acc[item] || 0) + 1 }), {});
   return (
     <SceneShell ctx={ctx} mode="helper" viewportHeight={result ? 360 : 204} lockOrder>
@@ -2023,11 +2434,12 @@ function Helper() {
                 {color === item ? <Wand2 /> : counts[item] || 0}
               </button>
             ))}
-            <button onClick={() => setMethodOpen(true)}><Sparkles />求解</button>
             <button onClick={() => setScanOpen(true)}><ScanLine />录入</button>
-            <button onClick={reset}><RefreshCw />重置</button>
-            <button className="danger" onClick={clear}><Trash2 />清空</button>
+            <button disabled={solving} onClick={() => setMethodOpen(true)}><Sparkles />{solving ? "求解中..." : "求解"}</button>
             <button onClick={() => setLegendOpen(true)}><Compass />图例</button>
+            <button onClick={scramble}><Shuffle />打乱</button>
+            <button onClick={reset}><RefreshCw />重置</button>
+            <button className="danger" onClick={clear}><Trash2 />清除涂色</button>
           </div>
         </div>
       )}
@@ -2264,31 +2676,24 @@ function Director() {
 }
 
 function HelpContent({ compact = false }: { compact?: boolean }) {
-  const keyRows = [
-    ["1", "2", "3=<", "4=>", "5=M", "6=M", "7=<", "8=>", "9", "0"],
-    ["Q=z'", "W=B", "E=L'", "R=Lw'", "T=x", "Y=x", "U=Rw", "I=R", "O=B'", "P=z"],
-    ["A=y'", "S=D", "D=L", "F=U'", "G=F'", "H=F", "J=U", "K=R'", "L=D'", ";=y"],
-    ["Z=Dw", "X=M'", "C=Uw'", "V=Lw", "B=x'", "N=x'", "M=Rw'", ",=Uw", ".=M'", "/=Dw'"],
-    ["←=U", "↑=R", "→=U'", "↓=R'"],
-  ];
   const quickStarts = [
-    ["练习复原", "进入练习，点重新打乱；拖动贴纸转层，拖空白区域转视角；完成后可看历史或分享复盘。"],
-    ["录入求解", "进入求解，先选颜色，再点魔方贴纸填色；颜色数量正确后点求解，可复制公式或直接播放。"],
-    ["学习公式", "进入公式，选择 F2L / OLL / PLL 条目；用播放器逐步观察，必要时直接编辑公式文本。"],
-    ["制作动画", "进入动画，编辑脚本，播放预览；需要素材时可截图、导出 GIF 或 PNG 序列。"],
+    ["AI 智能伴学", "右侧「魔方助手」接入 MCP 协议，随时点击「新手教学」、「CFOP速拧」或「下一步怎么做」，获取结构化动作与语音指导。"],
+    ["练习与计时", "3D 拟真舞台自由转动，支持鼠标拖拽旋转。点击左下角时钟可清零重置，打乱转动第 1 步自动起步计时。"],
+    ["录入与求解", "在求解模式中填涂真实魔方贴纸颜色，后端求解引擎秒级计算还原路径，并可点击播放条跟随 3D 动画复盘。"],
+    ["公式与动画", "在公式模式中按分类学习 F2L/OLL/PLL；在动画模式中编辑动作脚本，一键导出 GIF 动图或 PNG 序列。"],
   ];
   const modes = [
-    ["练习", "自由操作魔方", "适合计时、打乱、复原、撤销、查看历史和分享复盘。"],
-    ["求解", "三阶颜色录入", "适合把真实魔方状态录入到页面中，生成复原公式并播放检查。"],
-    ["公式", "内置公式库", "适合按分类学习 F2L、OLL、PLL，逐步观察公式如何移动块。"],
-    ["动画", "脚本与导出", "适合制作演示、教程素材、GIF 动画、透明 PNG 序列和分享播放链接。"],
-    ["播放", "只读复盘", "由分享链接或求解结果打开，专注播放场景和动作，不改动原始脚本。"],
+    ["练习", "3D 拟真舞台与计时复盘", "自由操作魔方、毫秒级计时、打乱还原、历史记录及 AI 实时伴学。"],
+    ["求解", "实体魔方颜色录入与求解", "录入真实魔方 54 格颜色，由 MCP 求解引擎秒级计算还原步骤并生成分步动画。"],
+    ["公式", "全套 CFOP 标准公式库", "涵盖 F2L、OLL、PLL 经典公式，支持逐步拆解播放与自定义编辑验证。"],
+    ["动画", "魔方动作脚本与动画制作", "支持自定义场景与动作脚本编写，可导出高清 PNG 序列或 GIF 教学动图。"],
+    ["播放", "复原路径推演播放器", "跟随 3D 动画与语音解法，按阶段和步骤逐格观察魔方旋转变化。"],
   ];
   return (
     <section className={compact ? "help compact-help" : "help-page"}>
-      <h1>Cuber 使用帮助</h1>
+      <h1>CubeTutor 使用帮助</h1>
       <p className="help-lead">
-        Cuber 是一个在浏览器中运行的魔方工具箱。它既可以当作自由练习的虚拟魔方，也能用于三阶求解、公式学习、动画制作、复盘播放和外观配置。
+        CubeTutor 是一个基于 <strong>MCP（Model Context Protocol）协议</strong> 与 3D 拟真舞台的智能魔方教学与求解系统。系统深度融合了 Emotion Ball 灵动 AI 伴学导师、多算法核心求解引擎（新手层先法 / CFOP 进阶速拧 / Kociemba 最优解）、3D 动画推演与语音教学。
       </p>
 
       <h2>快速开始</h2>
@@ -2314,80 +2719,48 @@ function HelpContent({ compact = false }: { compact?: boolean }) {
         ))}
       </div>
 
-      <h2>基础操作</h2>
+      <h2>AI 智能助手与求解体系</h2>
       <ul>
-        <li>在魔方贴纸上拖动可以转动对应层，在空白区域拖动可以旋转整体视角。</li>
-        <li>滚轮可以缩放视图；控制台的“镜头”页可以精确调整缩放、透视、水平角和俯仰角。</li>
-        <li>练习模式底部工具栏包含重新打乱、历史、撤销和分享。历史会保存初始场景和你的后续转动。</li>
-        <li>历史记录会保存当前初始状态和后续转动，复盘会打开独立播放模式，便于逐步查看还原过程。</li>
-        <li>重新打乱框中输入 <code>*</code> 会生成随机打乱；也可以输入指定公式作为打乱状态。</li>
+        <li><strong>新手层先法（LBL · 7 阶段）</strong>：专为初学者打造，按“底十字 ➔ 底角块 ➔ 中层棱 ➔ 顶十字 ➔ 顶角向 ➔ 顶角位 ➔ 顶棱位”分步推进，易学易懂。</li>
+        <li><strong>CFOP 进阶速拧（4 阶段）</strong>：竞技速拧主流方案，按“Cross 底十字 ➔ F2L 前两层 ➔ OLL 顶面朝向 ➔ PLL 顶层置换”快速还原。</li>
+        <li><strong>Kociemba 最优解</strong>：采用两阶段数学算法，20 步以内极速计算理论最优还原路径。</li>
+        <li><strong>大模型 API 配置</strong>：点击右侧面板顶部「⚙️ 设置」可配置 DeepSeek、通义千问、OpenRouter、OpenAI 等大模型服务，获得更具深度的答疑。</li>
       </ul>
 
-      <h2>键盘操作</h2>
-      <p>物理键盘会映射为常用转动，适合快速练习和公式输入。页面左上角会显示正在输入的数字前缀。</p>
-      <div className="key-table">
-        {keyRows.map((row, rowIndex) => (
-          <div key={rowIndex} className="key-row">
-            {row.map((item) => {
-              const [key, action = ""] = item.split("=");
-              return (
-                <span key={item}>
-                  <b>{key}</b>
-                  <small>{action}</small>
-                </span>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      <h2>3D 舞台与基础操作</h2>
+      <ul>
+        <li>在魔方贴纸上拖动可以转动对应层，在空白区域拖动可以旋转整体 3D 视角。</li>
+        <li>鼠标滚轮可缩放视图；控制台的“镜头”页可以精确调整缩放、透视、水平角和俯仰角。</li>
+        <li>练习模式底部工具栏包含计时重置、重新打乱、历史、撤销和分享功能。</li>
+        <li>点击左下角 <code>⏱️ 00:00.0/0</code> 计时卡片可一键重置当前用时与步数。</li>
+        <li>重新打乱框中输入 <code>*</code> 会生成随机打乱；也可以输入指定公式作为初始打乱状态。</li>
+      </ul>
 
-      <h2>求解模式</h2>
+      <h2>求解与录入模式</h2>
       <ul>
         <li>先在底部选择颜色，再点击魔方上的贴纸录入颜色。三阶魔方每种颜色应各出现 9 次。</li>
-        <li>“重置”会恢复一个标准已还原状态；“清空”会移除所有贴纸颜色，适合重新录入。</li>
-        <li>求解结果可以复制，也可以直接打开播放模式逐步检查。若返回错误，优先检查中心、棱块和角块颜色是否录入正确。</li>
+        <li>“重置”会恢复标准已还原状态；“清空”会移除所有贴纸颜色，适合重新录入。</li>
+        <li>求解完成后可直接打开播放器逐步跟随 3D 动画与语音解法复盘。若校验未通过，系统会自动提示不合法的具体原因。</li>
       </ul>
 
-      <h2>公式与播放</h2>
+      <h2>公式与动画制作</h2>
       <ul>
-        <li>公式模式内置 F2L、OLL、PLL。点击左上角公式名称可打开列表并切换条目。</li>
-        <li>播放条支持回到开始、上一步、播放/暂停、下一步、跳到结尾；进度滑块可以直接拖到任意步骤。</li>
-        <li>公式输入框可以临时编辑。恢复按钮会把当前条目还原为内置公式。</li>
-        <li>播放模式通常由分享链接、求解结果或动画分享打开，适合只读复盘和逐步讲解。</li>
+        <li>公式模式内置完整 F2L、OLL、PLL 公式库，支持按条目逐步拆解观察。</li>
+        <li>动画模式支持自定义场景和动作脚本，可一键导出高清透明 PNG 序列或 GIF 动图。</li>
+        <li>基础转动语法：<code>R U F D L B</code>；整体转动：<code>x y z</code>；宽层转动：<code>Rw Uw</code>；后缀 <code>'</code> 表示逆时针，数字表示旋转次数（如 <code>U2</code>）。</li>
       </ul>
 
-      <h2>动画制作</h2>
+      <h2>控制台与个性化</h2>
       <ul>
-        <li>“脚本”里有两个字段：场景用于布置初始状态，动作定义后续播放内容。</li>
-        <li>“展开”会把组合公式解析成逐步动作，便于检查和导出。</li>
-        <li>“截图”导出当前画面；“导出动画”可生成 GIF 或 PNG 序列；“分享”会复制可播放链接。</li>
-        <li>输出设置可调整画布像素、导出格式和 GIF 帧延迟。PNG 序列适合继续放进剪辑或设计软件处理。</li>
-      </ul>
-
-      <h2>脚本语法</h2>
-      <ul>
-        <li>基础转动：<code>R U F D L B</code>；整体转动：<code>x y z</code>；宽层转动：<code>Rw Uw</code>。</li>
-        <li>后缀 <code>'</code> 表示逆时针，数字表示重复次数，例如 <code>R'</code>、<code>U2</code>、<code>Rw2</code>。</li>
-        <li>括号可以组合并重复，例如 <code>(R U R' U')2</code>。</li>
-        <li>方括号支持交换子和共轭写法，例如 <code>[A,B]</code>、<code>[A:B]</code>。</li>
-        <li><code>^</code> 会把前面的逆操作写入场景，常用于把动画起始状态先摆好；<code>~</code> 表示停顿，<code>;</code> 表示快速分隔，<code>#</code> 表示复位，<code>*</code> 表示随机打乱。</li>
-        <li><code>SSE:</code> 前缀可输入 SSE 表达式，动画模式会在播放和展开时转换为标准动作。</li>
-        <li><code>//</code> 可以添加行注释，注释内容不会被解析成动作。</li>
-      </ul>
-
-      <h2>控制台设置</h2>
-      <ul>
-        <li>第一排是模式切换，决定当前工作流；第二排是当前应用的设置页签。</li>
-        <li>阶数支持 2 到 10 阶。求解和部分公式场景会锁定阶数，以保证算法和贴纸状态有效。</li>
-        <li>镜头页调整缩放、透视和视角；控制页调整动画帧数和触控灵敏度。</li>
-        <li>显示页切换厚贴纸、镜面、空心、箭头、光影和深色界面；配色页可修改六面颜色及辅助颜色。</li>
-        <li>右侧重置按钮会打开重置确认。可以只重置配置，也可以清空本地数据并刷新页面。</li>
+        <li>阶数支持 2 到 10 阶自由调节（求解模式锁定为 3 阶以匹配算法约束）。</li>
+        <li>显示页支持厚贴纸、镜面、空心、箭头、光影和深色界面自由切换。</li>
+        <li>配色页可自定义六面颜色及辅助高亮颜色，满足个性化视觉需求。</li>
       </ul>
 
       <h2>数据与分享</h2>
       <ul>
         <li>练习数据、偏好设置和配色保存在浏览器本地存储中，不需要账号。</li>
-        <li>分享链接会把阶数、场景、动作和必要贴纸状态编码到 URL 中。接收者打开后可直接复盘。</li>
+        <li>分享链接会把阶数、场景、动作和必要贴纸状态编码到 URL 中，接收者打开后可直接复盘。</li>
         <li>如果页面表现异常，可以先尝试控制台重置配置；需要彻底恢复时再选择清空全部本地数据。</li>
       </ul>
     </section>

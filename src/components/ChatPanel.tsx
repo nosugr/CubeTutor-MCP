@@ -1026,9 +1026,9 @@ export function ChatPanel({
             <Sparkles size={13} />
             CFOP速拧
           </button>
-          <button onClick={() => handleSend("检查当前魔方状态合法性")}>
-            <CheckCircle2 size={13} />
-            检查合法性
+          <button onClick={() => handleSend("检查当前魔方状态")}>
+            <Search size={13} />
+            检查魔方状态
           </button>
           <button onClick={() => handleSend("下一步怎么做？")}>
             <Compass size={13} />

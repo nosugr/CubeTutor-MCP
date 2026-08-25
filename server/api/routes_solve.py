@@ -19,12 +19,23 @@ router = APIRouter()
 
 class SolveBody(BaseModel):
     method: str
+    facelets: str | None = None
 
 
 @router.post("/api/solve")
 def solve(body: SolveBody) -> dict:
     try:
-        return get_shared_session().get_solution(body.method)
+        session = get_shared_session()
+        if body.facelets and len(body.facelets) == 54:
+            session.set_state(body.facelets)
+        m = body.method.lower()
+        if m in ("layerfirst", "beginner", "新手", "层先法", "层先"):
+            m = "beginner"
+        elif m in ("cfop", "速拧"):
+            m = "cfop"
+        elif m in ("kociemba", "two-phase", "两阶段"):
+            m = "kociemba"
+        return session.get_solution(m)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -34,8 +45,18 @@ def solve(body: SolveBody) -> dict:
 @router.post("/api/solve_with_agent")
 async def solve_with_agent(body: SolveBody) -> dict:
     try:
+        session = get_shared_session()
+        if body.facelets and len(body.facelets) == 54:
+            session.set_state(body.facelets)
+        m = body.method.lower()
+        if m in ("layerfirst", "beginner", "新手", "层先法", "层先"):
+            m = "beginner"
+        elif m in ("cfop", "速拧"):
+            m = "cfop"
+        elif m in ("kociemba", "two-phase", "两阶段"):
+            m = "kociemba"
         agent = Agent()
-        out = await agent.solve_with_narration(body.method)
+        out = await agent.solve_with_narration(m)
         return {"method": out["method"], "steps": out["steps"], "tool_calls": out.get("tool_calls", [])}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -160,16 +181,33 @@ async def stream_agent_chat(body: ChatBody) -> StreamingResponse:
                 yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
                 return
 
-        # Check explicit legality check query
-        if any(k in msg_lower for k in ["检查合法性", "校验合法", "是否合法", "合法性校验", "检查魔方合法"]):
+        # Check explicit "检查当前魔方状态" / "魔方状态" / "合法性校验"
+        if any(k in msg_lower for k in ["检查当前魔方状态", "检查魔方状态", "当前魔方状态", "查看魔方状态", "读取魔方状态", "检查状态", "查看状态", "检查合法性", "校验合法", "是否合法", "合法性校验", "魔方状态", "状态如何"]):
             try:
+                current_state = session.facelets
+                is_solved = current_state == SOLVED
                 val = session.validate()
-                if val.get("ok"):
-                    text = "当前魔方状态校验通过 (Valid)！\n54 格面块置换与朝向均符合数学群论物理约束，可正常求解。"
-                    em = "10"
+                val_ok = val.get("ok", False)
+
+                if val_ok:
+                    val_text = "✅ **合法性检测**：通过 (Valid) — 54 格色块置换与朝向符合物理约束，可正常求解。"
+                    em = "10" if is_solved else "02"
                 else:
-                    text = f"当前魔方状态非法 (Invalid)：{val.get('reason')}，请在录入界面调整贴纸颜色。"
+                    val_text = f"❌ **合法性检测**：异常 (Invalid) — {val.get('reason')}，请检查贴纸颜色。"
                     em = "32"
+
+                solve_status = "🎉 **已完全复原 (Solved)**" if is_solved else "🧩 **打乱未复原 (Scrambled)**"
+
+                text = (
+                    f"📋 **【当前魔方状态概览】**\n\n"
+                    f"1. **复原状态**：{solve_status}\n"
+                    f"2. {val_text}\n"
+                    f"3. **空间基准拿法**：\n"
+                    f"   • 顶面 (U) 白色中心 | 底面 (D) 黄色中心\n"
+                    f"   • 正面 (F) 绿色中心 | 背面 (B) 蓝色中心\n"
+                    f"   • 左面 (L) 橙色中心 | 右面 (R) 红色中心\n\n"
+                    f"💡 *您可以随时点击下方「下一步怎么做」或「新手教学」获取详细分步指导！*"
+                )
                 yield f"data: {json.dumps({'type': 'start', 'emotionId': em, 'tool_calls': ['get_cube_state', 'validate_state']}, ensure_ascii=False)}\n\n"
                 for char in text:
                     yield f"data: {json.dumps({'type': 'token', 'chunk': char}, ensure_ascii=False)}\n\n"
@@ -322,22 +360,38 @@ async def agent_chat(body: ChatBody) -> dict:
                 "tool_calls": ["get_cube_state"],
             }
 
-    # Check explicit legality check
-    if any(k in msg_lower for k in ["检查合法性", "校验合法", "是否合法", "合法性校验", "检查魔方合法"]):
+    # Check explicit "检查当前魔方状态" / "魔方状态" / "合法性校验"
+    if any(k in msg_lower for k in ["检查当前魔方状态", "检查魔方状态", "当前魔方状态", "查看魔方状态", "读取魔方状态", "检查状态", "查看状态", "检查合法性", "校验合法", "是否合法", "合法性校验", "魔方状态", "状态如何"]):
         try:
+            current_state = session.facelets
+            is_solved = current_state == SOLVED
             val = session.validate()
-            if val.get("ok"):
-                return {
-                    "reply": "当前魔方状态校验通过 (Valid)！\n54 格面块置换与朝向均符合数学群论物理约束，可正常求解。",
-                    "emotionId": "10",
-                    "tool_calls": ["get_cube_state", "validate_state"],
-                }
+            val_ok = val.get("ok", False)
+
+            if val_ok:
+                val_text = "✅ **合法性检测**：通过 (Valid) — 54 格色块置换与朝向符合物理约束，可正常求解。"
+                em = "10" if is_solved else "02"
             else:
-                return {
-                    "reply": f"当前魔方状态非法 (Invalid)：{val.get('reason')}，请在录入界面调整贴纸颜色。",
-                    "emotionId": "32",
-                    "tool_calls": ["get_cube_state", "validate_state"],
-                }
+                val_text = f"❌ **合法性检测**：异常 (Invalid) — {val.get('reason')}，请检查贴纸颜色。"
+                em = "32"
+
+            solve_status = "🎉 **已完全复原 (Solved)**" if is_solved else "🧩 **打乱未复原 (Scrambled)**"
+
+            reply = (
+                f"📋 **【当前魔方状态概览】**\n\n"
+                f"1. **复原状态**：{solve_status}\n"
+                f"2. {val_text}\n"
+                f"3. **空间基准拿法**：\n"
+                f"   • 顶面 (U) 白色中心 | 底面 (D) 黄色中心\n"
+                f"   • 正面 (F) 绿色中心 | 背面 (B) 蓝色中心\n"
+                f"   • 左面 (L) 橙色中心 | 右面 (R) 红色中心\n\n"
+                f"💡 *您可以随时点击下方「下一步怎么做」或「新手教学」获取详细分步指导！*"
+            )
+            return {
+                "reply": reply,
+                "emotionId": em,
+                "tool_calls": ["get_cube_state", "validate_state"],
+            }
         except Exception as e:
             return {
                 "reply": f"状态检查失败：{str(e)}",

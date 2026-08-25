@@ -124,6 +124,23 @@ export default class Cube extends THREE.Group {
 
   reset(): void {
     tweener.finish();
+    if (this.table && this.table.groups) {
+      for (const axis of ["x", "y", "z"]) {
+        const list = this.table.groups[axis];
+        if (list) {
+          for (const group of list) {
+            group.reset();
+          }
+        }
+      }
+    }
+    this.locks.get("x")?.clear();
+    this.locks.get("y")?.clear();
+    this.locks.get("z")?.clear();
+    this.locks.get("a")?.clear();
+    if (this.twister) {
+      this.twister.finish();
+    }
     for (const cubelet of this.cubelets) {
       cubelet.setRotationFromEuler(new THREE.Euler(0, 0, 0));
       cubelet.index = cubelet.initial;
@@ -132,6 +149,7 @@ export default class Cube extends THREE.Group {
     this.cubelets.sort((left, right) => {
       return left.index - right.index;
     });
+    this.dirty = true;
   }
 
   stick(index: number, face: number, value: string): void {
