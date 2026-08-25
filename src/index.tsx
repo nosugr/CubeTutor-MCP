@@ -714,6 +714,24 @@ function useKeyboard(callback: (exp: string) => void) {
   return prefix;
 }
 
+function BrandLogo() {
+  return (
+    <div className="brand-logo" title="CubeTutor 智能魔方教学系统" onClick={() => openMode("playground")}>
+      <div className="logo-letters">
+        <span style={{ color: "#ef4444" }}>R</span>
+        <span style={{ color: "#facc15" }}>U</span>
+        <span style={{ color: "#3b82f6" }}>B</span>
+        <span style={{ color: "#22c55e" }}>I</span>
+        <span style={{ color: "#f97316" }}>K</span>
+        <span style={{ color: "#3b82f6" }}>'</span>
+        <span style={{ color: "#facc15" }}>S</span>
+        <span className="logo-cube-word"> CUBE</span>
+      </div>
+      <div className="logo-subtext">CubeTutor · 智能魔方</div>
+    </div>
+  );
+}
+
 function SceneShell({
   ctx,
   mode,
@@ -741,6 +759,7 @@ function SceneShell({
   }, [ctx]);
   return (
     <main className="app-shell">
+      <BrandLogo />
       <SettingsPanel ctx={ctx} mode={mode} onOrder={onOrder} lockOrder={lockOrder} />
       <Viewport ref={viewport} ctx={ctx} />
       {children}

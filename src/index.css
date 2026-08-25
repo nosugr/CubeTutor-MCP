@@ -119,6 +119,58 @@ textarea {
   color: var(--text);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+}
+
+.brand-logo {
+  position: fixed;
+  top: 18px;
+  left: max(18px, calc((100vw - 760px) / 2));
+  z-index: 5;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.brand-logo:hover {
+  transform: scale(1.02);
+}
+
+.logo-letters {
+  font-family: "Impact", "Arial Black", "Arial", sans-serif;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.logo-cube-word {
+  color: var(--text);
+  margin-left: 3px;
+  letter-spacing: 1.5px;
+}
+
+.logo-subtext {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  line-height: 1;
+  margin-top: 3px;
 }
 
 .floating-menu {
@@ -130,8 +182,9 @@ textarea {
 
 .score-pill {
   top: 18px;
-  left: max(18px, calc((100vw - 760px) / 2));
-  padding: 0 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 18px;
   font-weight: 800;
   color: var(--primary);
 }
