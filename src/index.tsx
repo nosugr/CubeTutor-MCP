@@ -77,6 +77,7 @@ import Util from "./common/util";
 import GIF from "./common/gif";
 import ZIP from "./common/zip";
 import algsJson from "./vue/Algs/algs.json";
+import { ChatPanel } from "./components/ChatPanel";
 
 type Mode = "playground" | "helper" | "algs" | "director" | "player" | "help";
 type StickerMap = { [face: string]: { [index: number]: string } | undefined };
@@ -693,6 +694,36 @@ function useKeyboard(callback: (exp: string) => void) {
       188: "u", 37: "U", 38: "R", 39: "U'", 40: "R'",
     };
     const keydown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        (target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable ||
+            target.closest("input") ||
+            target.closest("textarea") ||
+            target.closest(".chat-panel") ||
+            target.closest(".chat-settings-modal") ||
+            target.closest(".model-picker-modal") ||
+            target.closest(".modal-card") ||
+            target.closest(".modal-wrapper"))) ||
+        (activeEl &&
+          (activeEl.tagName === "INPUT" ||
+            activeEl.tagName === "TEXTAREA" ||
+            activeEl.tagName === "SELECT" ||
+            activeEl.isContentEditable ||
+            activeEl.closest("input") ||
+            activeEl.closest("textarea") ||
+            activeEl.closest(".chat-panel") ||
+            activeEl.closest(".chat-settings-modal") ||
+            activeEl.closest(".model-picker-modal") ||
+            activeEl.closest(".modal-card") ||
+            activeEl.closest(".modal-wrapper")))
+      ) {
+        return;
+      }
       const id = event.keyCode || event.which;
       if (id === 51 || id === 55) {
         width = Math.max(2, width - 1);
@@ -749,20 +780,46 @@ function SceneShell({
 }) {
   const viewport = useRef<ViewportHandle>(null);
   const { width, height } = useWindowSize();
+  const [chatOpen, setChatOpen] = useState(true);
+  const [chatWidth, setChatWidth] = useState(380);
+
   useEffect(() => {
-    viewport.current?.resize(width, Math.max(1, height - viewportHeight));
-  }, [height, viewportHeight, width]);
+    const panelW = chatOpen && width > 960 ? chatWidth : 0;
+    viewport.current?.resize(Math.max(1, width - panelW), Math.max(1, height - viewportHeight));
+  }, [height, viewportHeight, width, chatOpen, chatWidth]);
+
   useAnimation(() => viewport.current?.draw());
   useEffect(() => {
     ctx.preferance.refresh();
     ctx.palette.refresh();
   }, [ctx]);
+
+  const handleApplySolution = (solution: any) => {
+    if (!solution || !solution.steps) return;
+    const moves = solution.steps.map((s: any) => s.move).join(" ");
+    ctx.world.cube.twister.setup(ctx.world.cube.history.init);
+    for (const action of new TwistNode(moves).parse()) {
+      ctx.world.cube.twister.twist(action, true, true);
+    }
+  };
+
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell ${chatOpen ? "chat-open" : ""}`}
+      style={{ ["--chat-w" as any]: `${chatWidth}px` }}
+    >
       <BrandLogo />
       <SettingsPanel ctx={ctx} mode={mode} onOrder={onOrder} lockOrder={lockOrder} />
       <Viewport ref={viewport} ctx={ctx} />
       {children}
+      <ChatPanel
+        open={chatOpen}
+        onToggle={setChatOpen}
+        onWidthChange={setChatWidth}
+        getCubeState={() => ctx.world.cube.serialize()}
+        isSolved={ctx.world.cube.complete}
+        onApplySolution={handleApplySolution}
+      />
     </main>
   );
 }

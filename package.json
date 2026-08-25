@@ -6,7 +6,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"python -m uvicorn --app-dir server api.http_app:app --port 8000\" \"vite --host 0.0.0.0\"",
+    "start": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"python -m uvicorn --app-dir server api.http_app:app --port 8000 --reload\" \"vite --host 0.0.0.0\"",
     "dev": "vite --host 0.0.0.0",
     "watch": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",

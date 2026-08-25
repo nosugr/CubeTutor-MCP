@@ -5,10 +5,11 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   resolve: {
-    extensions: [".mjs", ".js", ".ts", ".json"],
+    extensions: [".mjs", ".js", ".ts", ".jsx", ".tsx", ".json"],
   },
   server: {
     proxy: {
+      "/api": "http://localhost:8000",
       "/detect": "http://localhost:8000",
       "/health": "http://localhost:8000",
     },

@@ -18,12 +18,18 @@ class CubeSession:
     def get_cube_state(self) -> str:
         return self.facelets
 
+    def get_facelets(self) -> str:
+        return self.facelets
+
     def validate_state(self, facelets: str | None = None) -> dict:
         ok, reason = validate_state(facelets if facelets is not None else self.facelets)
         out: dict = {"ok": ok}
         if reason is not None:
             out["reason"] = reason
         return out
+
+    def validate(self, facelets: str | None = None) -> dict:
+        return self.validate_state(facelets)
 
     def get_solution(self, method: str) -> dict:
         sol = get_solver(method).solve(self.facelets)
