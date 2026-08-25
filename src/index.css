@@ -126,7 +126,7 @@ textarea {
 .brand-logo {
   position: fixed;
   top: 18px;
-  left: max(18px, calc((100vw - 760px) / 2));
+  left: 20px;
   z-index: 5;
   display: inline-flex;
   flex-direction: column;
@@ -175,7 +175,7 @@ textarea {
 
 .floating-menu {
   top: 18px;
-  right: max(18px, calc((100vw - 760px) / 2));
+  right: 20px;
   width: 48px;
   cursor: pointer;
 }
