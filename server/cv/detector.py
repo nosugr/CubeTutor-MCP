@@ -56,6 +56,21 @@ async def detect_cube_roboflow(image_bytes: bytes) -> tuple[Optional[dict], Opti
         return None, f"检测异常: {e}"
 
 
+async def debug_detect_roboflow(image_bytes: bytes) -> dict:
+    """Debug helper: return raw Roboflow response details."""
+    try:
+        files = {"file": ("cube.jpg", image_bytes, "image/jpeg")}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(ROBOFLOW_URL, files=files)
+        return {
+            "status_code": resp.status_code,
+            "roboflow_url": ROBOFLOW_URL.replace(ROBOFLOW_API_KEY, "***"),
+            "body_preview": resp.text[:500],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def sample_sticker_colors(frame, bbox: dict) -> list[str]:
     """Sample 3x3 sticker grid colors within the detected bounding box, return HEX list."""
     try:

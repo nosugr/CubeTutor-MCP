@@ -42,7 +42,6 @@ import {
   Sparkles,
   Timer,
   Trash2,
-  Wand2,
   X,
   Zap,
 } from "lucide-react";
@@ -800,15 +799,6 @@ function SceneShell({
     ctx.palette.refresh();
   }, [ctx]);
 
-  const handleApplySolution = (solution: any) => {
-    if (!solution || !solution.steps) return;
-    const moves = solution.steps.map((s: any) => s.move).join(" ");
-    ctx.world.cube.twister.setup(ctx.world.cube.history.init);
-    for (const action of new TwistNode(moves).parse()) {
-      ctx.world.cube.twister.twist(action, true, true);
-    }
-  };
-
   return (
     <main
       className={`app-shell ${chatOpen ? "chat-open" : ""}`}
@@ -824,7 +814,6 @@ function SceneShell({
         onWidthChange={setChatWidth}
         getCubeState={() => ctx.world.cube.serialize()}
         isSolved={ctx.world.cube.complete}
-        onApplySolution={handleApplySolution}
       />
     </main>
   );
@@ -1224,6 +1213,7 @@ function ScannerPanel({
               regionRef.current = region;
               const face = identifyFace(grid);
               const key = grid.join("");
+              // 连续两次检测分布一致 → 锁定该分布在一旁
               if (key === prevDetectKeyRef.current && (!lockedRef.current || lockedRef.current.rawKey !== key)) {
                 const displayGrid = mirroredRef.current ? mirrorGrid(grid) : [...grid];
                 const lface = targetRef.current ?? face;
@@ -1232,9 +1222,13 @@ function ScannerPanel({
               }
               prevDetectKeyRef.current = key;
               if (lockedRef.current) {
-                nextPrompt = `✨ 已稳定锁定 ${lockedRef.current.face} 面，可按空格键或点击“采集此面”`;
+                nextPrompt = targetRef.current
+                  ? `已锁定 ${targetRef.current} 面分布，可松开魔方后点击"采集锁定"录入`
+                  : `已锁定 ${lockedRef.current.face} 面分布，可松开魔方后点击"采集锁定"录入（已完成 ${capturedCount(capturedRef.current)}/6）`;
               } else {
-                nextPrompt = `✅ 检测到 ${face} 面（${FACE_ORIENTATION_HINTS[face]}）。已对准，可点击采集。`;
+                nextPrompt = targetRef.current
+                  ? `目标面 ${targetRef.current}（${FACE_ORIENTATION_HINTS[targetRef.current]}）：当前识别中心为 ${face}。对准后点击采集。`
+                  : `检测到魔方面 ${face}（${FACE_ORIENTATION_HINTS[face]}，已完成 ${capturedCount(capturedRef.current)}/6）。对准后点击采集。`;
               }
             }
           } else if (result && !result.success) {
@@ -1246,13 +1240,13 @@ function ScannerPanel({
           regionRef.current = null;
           prevDetectKeyRef.current = "";
           if (lockedRef.current) {
-            nextPrompt = `✨ 已锁定 ${lockedRef.current.face} 面，可直接按空格或点击采集`;
+            nextPrompt = `已锁定 ${lockedRef.current.face} 面分布，可松开魔方后点击"采集锁定"录入`;
           } else if (!backendConnected) {
-            nextPrompt = "未连接检测服务，请确认后端已启动";
+            nextPrompt = "未连接检测服务，请确认后端已启动后返回重试";
           } else if (lastFailMsgRef.current) {
-            nextPrompt = `正在搜索：${lastFailMsgRef.current}`;
+            nextPrompt = `检测失败：${lastFailMsgRef.current}`;
           } else {
-            nextPrompt = "正在寻找魔方…请将魔方平稳对准虚线框";
+            nextPrompt = "正在搜索魔方…请将魔方一个面朝向镜头";
           }
         }
         const key = liveGridRef.current.join("");
@@ -1306,9 +1300,13 @@ function ScannerPanel({
         const msg = e instanceof Error ? e.message : String(e);
         let hint = "";
         if (msg.includes("Could not start video source")) {
-          hint = "（摄像头可能被其他程序占用，或浏览器未授权。）";
+          hint = "（摄像头可能被其他程序占用，或浏览器未授权。请关闭占用程序后重试。）";
         } else if (msg.includes("NotAllowedError") || msg.includes("Permission")) {
-          hint = "（摄像头权限被拒绝。请在浏览器地址栏点击允许。）";
+          hint = "（摄像头权限被拒绝。请在浏览器地址栏点击允许，或清除站点权限后重试。）";
+        } else if (msg.includes("NotFoundError") || msg.includes("Requested device")) {
+          hint = "（未检测到摄像头设备。）";
+        } else if (msg.includes("NotReadableError")) {
+          hint = "（摄像头被其他程序占用。）";
         }
         setError("无法访问摄像头：" + msg + hint);
       });
@@ -1339,8 +1337,11 @@ function ScannerPanel({
     const next = { ...capturedRef.current };
     next[face] = grid;
     setCaptured(next);
-    const count = capturedCount(next);
-    const msg = `已录入 ${face} 面 (${FACE_NAMES_CN[face]})，已完成 ${count}/6 面`;
+    const identified = identifyFace(grid);
+    const onTop = ON_TOP_FACE[face];
+    const msg = targetRef.current && identified !== targetRef.current
+      ? `已录入 ${face} 面（中心识别为 ${identified}，请确认朝向）`
+      : `已录入 ${face} 面（${FACE_NAMES_CN[face]}正对镜头，${FACE_NAMES_CN[onTop]}朝上，可在展开图中旋转校正）`;
     lastPromptRef.current = msg;
     setPrompt(msg);
     prevDetectKeyRef.current = "";
@@ -1355,11 +1356,12 @@ function ScannerPanel({
   useEffect(() => {
     if (!open || phase !== "capture") return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (liveGridRef.current.length === 9 || lockedRef.current) {
-          capture();
-        }
+      if (e.code !== "Space" && e.key !== " ") return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      if (liveGridRef.current.length === 9 || lockedRef.current) {
+        capture();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1370,6 +1372,17 @@ function ScannerPanel({
     lockedRef.current = null;
     prevDetectKeyRef.current = "";
     setLocked(null);
+  };
+
+  const rediscover = () => {
+    clearLock();
+    liveGridRef.current = [];
+    regionRef.current = null;
+    lastKeyRef.current = "";
+    setLiveReady(false);
+    const msg = "正在搜索魔方…请将魔方一个面朝向镜头";
+    lastPromptRef.current = msg;
+    setPrompt(msg);
   };
 
   const rotate = (face: FaceKey) => {
@@ -1407,9 +1420,10 @@ function ScannerPanel({
 
   if (!open) return null;
   const validation = phase === "review" ? validateState(captured) : null;
+  const suggestedFace: FaceKey = target ?? (liveGridRef.current.length === 9 ? identifyFace(liveGridRef.current) : currentTarget);
 
   return (
-    <Modal title="AI 视觉魔方状态录入" open={open} onClose={onClose} className="scanner-modal">
+    <Modal title="魔方状态录入" open={open} onClose={onClose} className="scanner-modal">
       <video ref={videoRef} className="scanner-video-hidden" playsInline muted />
       {error && <div className="scanner-error">{error}</div>}
 
@@ -1423,8 +1437,15 @@ function ScannerPanel({
             <li>点击“开始录入”后，将实体魔方的各个面逐一正对镜头。</li>
             <li>系统将自动识别当前面的 3×3 九格颜色分布，按提示依次完成 6 个面的采集。</li>
             <li>在光线均匀、背景简洁的环境下识别更加稳定准确。</li>
-            <li>录入完成后可在 2D 展开图中进行颜色微调与朝向校正，确认无误即可一键同步至 3D 舞台。</li>
+            <li>录入完成后可在 2D 展开图中进行颜色微调与朝向校正，确认无误即可同步至 3D 模型。</li>
           </ul>
+
+          {!backendConnected && (
+            <small className="hint scanner-backend-hint" style={{ marginTop: "10px", display: "block", color: "var(--muted)" }}>
+              检测服务{backendStatus}。若无法识别，请确保后端服务已启动。
+            </small>
+          )}
+
           <div className="modal-actions" style={{ justifyContent: "flex-end", marginTop: "16px" }}>
             <button type="button" onClick={onClose}>取消</button>
             <button type="button" className="btn-capture-main" onClick={() => setPhase("capture")}>
@@ -1484,15 +1505,6 @@ function ScannerPanel({
                 <div className="hud-corner top-right" />
                 <div className="hud-corner bottom-left" />
                 <div className="hud-corner bottom-right" />
-                <div className="scanner-hud-hint">
-                  <span
-                    className="hud-target-pill"
-                    style={{ background: FACE_COLORS[currentTarget], color: contrastColor(FACE_COLORS[currentTarget]) }}
-                  >
-                    当前目标：{currentTarget} 面 ({FACE_NAMES_CN[currentTarget]})
-                  </span>
-                  <span className="hud-target-desc">👆 保持【{ON_TOP_FACE[currentTarget]} 面 ({FACE_NAMES_CN[ON_TOP_FACE[currentTarget]]})】朝上</span>
-                </div>
               </div>
               <div className="scanner-prompt-bar">
                 <Sparkles size={16} className="prompt-icon" />
@@ -1528,13 +1540,25 @@ function ScannerPanel({
                 </div>
               </div>
 
-              {locked && (
+              {locked ? (
                 <div className="scanner-locked-box">
                   <div className="locked-header">
                     <span className="locked-tag">✨ 已锁定 {locked.face} 面</span>
-                    <button type="button" className="locked-clear-btn" onClick={clearLock}>重新检测</button>
+                    <button type="button" className="locked-clear-btn" onClick={rediscover}>
+                      <RefreshCw size={12} /> 重新搜索
+                    </button>
                   </div>
-                  <p className="locked-tip">图案已自动稳定，可松手直接点击“采集”或按空格</p>
+                  <p className="locked-tip">已锁定 {locked.face} 面分布，可松开魔方后点击“采集锁定”录入</p>
+                </div>
+              ) : (
+                <div className="scanner-locked-box" style={{ background: "rgba(0,0,0,0.02)", borderStyle: "dashed" }}>
+                  <div className="locked-header">
+                    <span style={{ fontSize: "12px", color: "var(--muted)" }}>面锁定状态</span>
+                    <button type="button" className="locked-clear-btn" onClick={rediscover}>
+                      <RefreshCw size={12} /> 寻找魔方
+                    </button>
+                  </div>
+                  <p className="locked-tip" style={{ color: "var(--muted)" }}>尚未锁定，对准稳定后将自动锁定当前面</p>
                 </div>
               )}
 
@@ -1545,7 +1569,9 @@ function ScannerPanel({
                 </div>
                 <div className="tip-item">
                   <span className="tip-key">📐 朝向指引：</span>
-                  <span>{FACE_ORIENTATION_HINTS[currentTarget]}</span>
+                  <div style={{ marginTop: "4px", fontSize: "12px" }}>
+                    {FACE_ORIENTATION_HINTS[suggestedFace]}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1583,7 +1609,7 @@ function ScannerPanel({
       {phase === "review" && (
         <div className="scanner-review-wrap">
           <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", lineHeight: 1.6 }}>
-            下方为 6 面展开图。点击任意贴纸色块可<strong>手动循环切换颜色</strong>；点击<strong>旋转按钮</strong>可修正方向。确认与实体魔方完全一致后点击“确定涂色并同步”。
+            下方为 6 面展开图。点击任意贴纸色块可<strong>手动循环切换颜色</strong>；点击<strong>旋转按钮</strong>可修正方向。确认与实体魔方完全一致后点击“同步至 3D 模型”。
           </p>
 
           {/* 颜色数量统计指示条 */}
@@ -1622,7 +1648,8 @@ function ScannerPanel({
               📸 继续采集 / 补扫
             </button>
             <button type="button" className="btn-capture-main" onClick={confirm}>
-              🚀 确定涂色并同步至 3D 舞台
+              <Check size={16} />
+              <span>同步至 3D 模型</span>
             </button>
           </div>
         </div>
@@ -2230,16 +2257,28 @@ function convertBackendSolution(
 
 function Helper() {
   const ctx = useAppContext();
-  const [color, setColor] = useState("R");
   const [stickers, setStickers] = useState<StickerMap>(() => JSON.parse(localStorage.getItem("helper-stickers") || "{}"));
   const [methodOpen, setMethodOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [resultScene, setResultScene] = useState("");
   const [errorText, setErrorText] = useState("");
-  const [state, setState] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
   const [solving, setSolving] = useState(false);
+
+  // 把保存下来的贴纸映射重新写到 cube 上（务必先 reset+strip 回初始态，
+  // 否则 cubelet 旋转/位置错乱，stick() 写入的 slot 和 serialize() 读取的
+  // 世界方向无法对应，会导致 serialize 出错误颜色 / 错位面。）
+  const applyStickerMap = (map: StickerMap) => {
+    for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
+      const list = map[FACE[face]];
+      if (list) {
+        for (const sticker in list) {
+          ctx.world.cube.stick(Number(sticker), face, list[sticker]);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     ctx.world.order = 3;
@@ -2256,46 +2295,13 @@ function Helper() {
         if (savedStickers && Object.keys(savedStickers).length > 0) {
           ctx.world.cube.reset();
           ctx.world.cube.strip({});
-          for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
-            const list = savedStickers[FACE[face]];
-            if (list) {
-              for (const sticker in list) {
-                ctx.world.cube.stick(Number(sticker), face, list[sticker]);
-              }
-            }
-          }
+          applyStickerMap(savedStickers);
         }
       } catch (e) {
         console.error("Failed to parse saved stickers:", e);
       }
     }
-    setState(ctx.world.cube.serialize());
   }, [ctx.world]);
-
-  useEffect(() => {
-    ctx.world.order = 3;
-    const tapHandler = (index: number, face: number | null) => {
-      if (face != null && index >= 0) {
-        ctx.world.cube.twister.finish();
-        const cubelet = ctx.world.cube.cubelets[index];
-        if (!cubelet) return;
-        const initial = cubelet.initial;
-        const realFace = cubelet.getFace(face);
-        setStickers((value) => {
-          const next = { ...value, [FACE[realFace]]: { ...(value[FACE[realFace]] || {}), [initial]: color } };
-          localStorage.removeItem("helper-scene");
-          localStorage.setItem("helper-stickers", JSON.stringify(next));
-          ctx.world.cube.stick(initial, realFace, color);
-          setState(ctx.world.cube.serialize());
-          return next;
-        });
-      }
-    };
-    ctx.world.controller.taps.push(tapHandler);
-    return () => {
-      ctx.world.controller.taps = ctx.world.controller.taps.filter((fn) => fn !== tapHandler);
-    };
-  }, [color, ctx.world]);
 
   const reset = () => {
     ctx.world.cube.twister.finish();
@@ -2313,7 +2319,6 @@ function Helper() {
     }
     setStickers(next);
     localStorage.setItem("helper-stickers", JSON.stringify(next));
-    setState(ctx.world.cube.serialize());
   };
 
   const clear = () => {
@@ -2323,7 +2328,6 @@ function Helper() {
     localStorage.removeItem("helper-scene");
     ctx.world.cube.reset();
     ctx.world.cube.strip({});
-    setState(ctx.world.cube.serialize());
   };
 
   const scramble = () => {
@@ -2335,7 +2339,6 @@ function Helper() {
     const exp = ctx.world.cube.twister.scrambler();
     ctx.world.cube.twister.setup(exp);
     localStorage.setItem("helper-scene", exp);
-    setState(ctx.world.cube.serialize());
   };
 
   const runSolve = async (method: SolveMethod) => {
@@ -2385,17 +2388,22 @@ function Helper() {
     ctx.world.cube.strip({});
     ctx.world.cube.twister.setup(resultScene);
     if (stickers && Object.keys(stickers).length > 0) {
-      for (const face of [FACE.L, FACE.R, FACE.D, FACE.U, FACE.B, FACE.F]) {
-        const list = stickers[FACE[face]];
-        if (list) for (const sticker in list) ctx.world.cube.stick(Number(sticker), face, list[sticker]);
-      }
+      applyStickerMap(stickers);
     }
     setResult(null);
   };
 
   const applyScan = (faces: Record<FaceKey, FaceKey[]>) => {
     localStorage.removeItem("helper-scene");
-    const next: StickerMap = { ...stickers };
+    // 录入 = 绝对贴纸状态，必须先把 cube 复位到初始位置/朝向，
+    // 否则之前的「打乱」会让 cubelet 旋转错位，stick() 写入的 slot
+    // 方向和 serialize() 以「世界方向」读取的方向不一致，
+    // 造成「识别对了但填进去颜色/面都错」的现象。
+    ctx.world.cube.twister.finish();
+    ctx.world.cube.reset();
+    ctx.world.cube.strip({});
+
+    const next: StickerMap = {};
     for (const fk of FACE_KEYS) {
       const grid = faces[fk];
       if (!grid) continue;
@@ -2411,13 +2419,11 @@ function Helper() {
     }
     setStickers(next);
     localStorage.setItem("helper-stickers", JSON.stringify(next));
-    setState(ctx.world.cube.serialize());
     setScanOpen(false);
   };
 
-  const counts = [...state].reduce<Record<string, number>>((acc, item) => ({ ...acc, [item]: (acc[item] || 0) + 1 }), {});
   return (
-    <SceneShell ctx={ctx} mode="helper" viewportHeight={result ? 360 : 204} lockOrder>
+    <SceneShell ctx={ctx} mode="helper" viewportHeight={result ? 360 : 140} lockOrder>
       {result ? (
         <SolutionPlayer
           ctx={ctx}
@@ -2427,13 +2433,8 @@ function Helper() {
           onClose={exitPlayer}
         />
       ) : (
-        <div className="bottom-panel tall">
+        <div className="bottom-panel">
           <div className="color-grid">
-            {["R", "F", "D", "L", "B", "U"].map((item) => (
-              <button key={item} className={color === item ? "selected" : ""} style={{ background: COLORS[item] }} onClick={() => setColor(item)}>
-                {color === item ? <Wand2 /> : counts[item] || 0}
-              </button>
-            ))}
             <button onClick={() => setScanOpen(true)}><ScanLine />录入</button>
             <button disabled={solving} onClick={() => setMethodOpen(true)}><Sparkles />{solving ? "求解中..." : "求解"}</button>
             <button onClick={() => setLegendOpen(true)}><Compass />图例</button>

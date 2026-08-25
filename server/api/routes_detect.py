@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from cv import (
     detect_cube_roboflow,
+    debug_detect_roboflow,
     sample_sticker_colors,
     grid_to_face_keys,
     ROBOFLOW_MODEL_ID,
@@ -36,6 +37,13 @@ async def health():
         "method": "roboflow",
         "model": ROBOFLOW_MODEL_ID,
     }
+
+
+@router.post("/debug/detect")
+async def debug_detect(file: UploadFile = File(...)):
+    """Debug endpoint: return raw Roboflow response details."""
+    contents = await file.read()
+    return await debug_detect_roboflow(contents)
 
 
 @router.post("/detect", response_model=DetectionResult)

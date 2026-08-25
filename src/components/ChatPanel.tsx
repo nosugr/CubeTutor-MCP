@@ -38,7 +38,6 @@ export interface ChatMessage {
 export interface ChatPanelProps {
   open: boolean;
   onToggle: (open: boolean) => void;
-  onApplySolution?: (solution: Record<string, unknown>) => void;
   getCubeState?: () => string;
   isSolved?: boolean;
   onWidthChange?: (width: number) => void;
@@ -166,7 +165,6 @@ function FormattedMarkdownText({ text }: { text: string }) {
 export function ChatPanel({
   open,
   onToggle,
-  onApplySolution,
   getCubeState,
   isSolved = false,
   onWidthChange,
@@ -688,9 +686,6 @@ export function ChatPanel({
               }
               if (data.solution) {
                 solution = data.solution;
-                if (onApplySolution) {
-                  onApplySolution(data.solution);
-                }
               }
               if (finalEmotion === "33" || finalEmotion === "10") {
                 setStatusText("教学讲解中 🎓");

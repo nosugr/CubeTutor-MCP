@@ -418,11 +418,11 @@ button:disabled {
   position: fixed;
   inset: 0;
   z-index: 20;
-  display: grid;
-  justify-items: center;
-  align-items: start;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   background: rgba(16, 22, 33, 0.42);
-  padding: 10px;
+  padding: 12px;
 }
 
 .modal-backdrop.preview-backdrop {
@@ -431,9 +431,9 @@ button:disabled {
 
 .modal {
   width: min(760px, 100%);
-  max-height: calc(100vh - 20px);
+  max-height: calc(100vh - 24px);
   overflow: auto;
-  margin-top: 10px;
+  margin: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-strong);
@@ -1143,13 +1143,16 @@ button:disabled {
  * ============================================================ */
 
 .scanner-modal {
-  width: min(920px, calc(100vw - 32px)) !important;
-  max-width: 920px !important;
-  max-height: 90vh !important;
+  width: min(980px, calc(100vw - 32px)) !important;
+  max-width: 980px !important;
+  height: min(720px, calc(100vh - 36px)) !important;
+  max-height: calc(100vh - 36px) !important;
   padding: 0 !important;
+  margin: 0 !important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
+  border-radius: 12px !important;
 }
 
 .scanner-intro {
@@ -1157,6 +1160,8 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .scanner-intro p {
@@ -1177,22 +1182,31 @@ button:disabled {
   line-height: 1.6;
 }
 
+.scanner-capture {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* 顶部 6 面状态切换卡片栏 */
 .scanner-face-tabs {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  padding: 12px 18px;
+  gap: 6px;
+  padding: 8px 16px;
   background: var(--surface-strong);
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .scanner-face-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--surface);
   cursor: pointer;
@@ -1203,8 +1217,8 @@ button:disabled {
 
 .scanner-face-card:hover {
   border-color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
 .scanner-face-card.active {
@@ -1220,23 +1234,23 @@ button:disabled {
 .face-card-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .face-card-tag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  font-size: 12px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 800;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .face-card-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text);
   flex: 1;
@@ -1251,26 +1265,27 @@ button:disabled {
 .face-card-mini-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  padding: 3px;
-  border-radius: 4px;
+  gap: 1.5px;
+  padding: 2px;
+  border-radius: 3px;
   background: rgba(0, 0, 0, 0.04);
 }
 
 .mini-grid-dot {
   aspect-ratio: 1;
-  border-radius: 2px;
+  border-radius: 1.5px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 /* 主采集区域 - 左右分栏 */
 .scanner-capture-body {
-  padding: 16px 20px;
+  padding: 12px 16px;
   display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 20px;
+  grid-template-columns: 1fr 270px;
+  gap: 14px;
   align-items: start;
-  max-height: calc(85vh - 170px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1286,24 +1301,26 @@ button:disabled {
 .scanner-stage-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .scanner-stage {
   position: relative;
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   background: #000;
   border: 1px solid var(--line);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
+  max-height: min(340px, 42vh);
 }
 
 .scanner-canvas {
   width: 100%;
-  max-height: 440px;
+  max-height: min(340px, 42vh);
   height: auto;
   display: block;
   object-fit: contain;
@@ -1312,55 +1329,25 @@ button:disabled {
 /* HUD 4角准心 */
 .hud-corner {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-color: rgba(34, 197, 94, 0.85);
   pointer-events: none;
 }
-.hud-corner.top-left { top: 12px; left: 12px; border-top: 3px solid; border-left: 3px solid; border-top-left-radius: 4px; }
-.hud-corner.top-right { top: 12px; right: 12px; border-top: 3px solid; border-right: 3px solid; border-top-right-radius: 4px; }
-.hud-corner.bottom-left { bottom: 12px; left: 12px; border-bottom: 3px solid; border-left: 3px solid; border-bottom-left-radius: 4px; }
-.hud-corner.bottom-right { bottom: 12px; right: 12px; border-bottom: 3px solid; border-right: 3px solid; border-bottom-right-radius: 4px; }
-
-.scanner-hud-hint {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 30px;
-  background: rgba(16, 22, 33, 0.78);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-  pointer-events: none;
-  z-index: 2;
-  white-space: nowrap;
-}
-
-.hud-target-pill {
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 800;
-}
+.hud-corner.top-left { top: 10px; left: 10px; border-top: 3px solid; border-left: 3px solid; border-top-left-radius: 4px; }
+.hud-corner.top-right { top: 10px; right: 10px; border-top: 3px solid; border-right: 3px solid; border-top-right-radius: 4px; }
+.hud-corner.bottom-left { bottom: 10px; left: 10px; border-bottom: 3px solid; border-left: 3px solid; border-bottom-left-radius: 4px; }
+.hud-corner.bottom-right { bottom: 10px; right: 10px; border-bottom: 3px solid; border-right: 3px solid; border-bottom-right-radius: 4px; }
 
 .scanner-prompt-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background: var(--surface-strong);
   border: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
@@ -1374,18 +1361,19 @@ button:disabled {
 .scanner-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .scanner-live-card {
-  padding: 14px;
-  border-radius: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--surface);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .live-card-title {
@@ -1393,7 +1381,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--text);
 }
@@ -1401,7 +1389,7 @@ button:disabled {
 .live-badge {
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
 }
 .live-badge.ok { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
@@ -1409,26 +1397,26 @@ button:disabled {
 
 .live-grid-display {
   display: grid;
-  grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(3, 44px);
-  gap: 3px;
-  padding: 4px;
-  border-radius: 8px;
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: repeat(3, 34px);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 6px;
   background: var(--line);
 }
 
 .live-cell {
-  border-radius: 4px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .live-center-info {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -1436,13 +1424,13 @@ button:disabled {
 }
 
 .scanner-locked-box {
-  padding: 12px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
   border: 1px dashed rgba(34, 197, 94, 0.6);
   background: rgba(34, 197, 94, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .locked-header {
@@ -1452,19 +1440,22 @@ button:disabled {
 }
 
 .locked-tag {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #16a34a;
 }
 
 .locked-clear-btn {
   font-size: 11px;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .locked-clear-btn:hover {
@@ -1476,20 +1467,20 @@ button:disabled {
   font-size: 11px;
   color: var(--muted);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .scanner-quick-tips {
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
   background: var(--surface-strong);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11.5px;
   color: var(--muted);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .tip-item {
@@ -1508,16 +1499,17 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 10px 16px;
   border-top: 1px solid var(--line);
   background: var(--surface-strong);
+  flex-shrink: 0;
 }
 
 .btn-capture-main {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 18px;
+  padding: 8px 16px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
@@ -1570,11 +1562,12 @@ button:disabled {
 
 /* 展开图校对页 */
 .scanner-review-wrap {
-  padding: 18px 22px;
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-height: calc(85vh - 140px);
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
