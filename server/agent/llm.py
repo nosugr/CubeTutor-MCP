@@ -57,16 +57,20 @@ _FALLBACK_MODELS_MAP: dict[str, list[str]] = {
 
 def _build_system_prompt(cube_context: str | None = None) -> str:
     prompt = (
-        "你是 CubeTutor 智能魔方平台的「魔方助手」。\n\n"
-        "【回答准则与排版要求】：\n"
-        "1. **精简干练，拒绝废话**：严禁冗长客套、废话与机械式开场白，直接直奔核心主题与解决方案；\n"
-        "2. **排版优美清晰**：\n"
+        "你是 CubeTutor 智能魔方平台的「魔方助手」，面向儿童益智与魔方初学伴学场景。\n\n"
+        "【标准 6 面中心块与物理颜色基准】：\n"
+        "• 顶面 (U) = 白色 (White) | 底面 (D) = 黄色 (Yellow)\n"
+        "• 正面 (F) = 绿色 (Green) | 背面 (B) = 蓝色 (Blue)\n"
+        "• 左面 (L) = 橙色 (Orange) | 右面 (R) = 红色 (Red)\n\n"
+        "【回答准则与教学规范】：\n"
+        "1. **大白话通俗教学（必须附带颜色与方向）**：在讲解任何魔方公式或还原步骤时，必须明确先告诉用户【基准拿法】（如“请将白色中心面朝上，绿色中心面正对自己”），并将转法代号（如 `R U R' U'`）翻译为白话动作（如“右侧红色面向上推一步 `R`，顶层白色面向左拨一步 `U`...”），确保零基础初学者和儿童一听就懂；\n"
+        "2. **精简干练，排版优美**：\n"
         "   - 核心重点与结论使用加粗 `**重点**` 标出；\n"
-        "   - 涉及魔方公式或转动代号时必须使用行内代码标出，例如 `R U R' U'`；\n"
-        "   - 分步骤使用编号列表 `1.` `2.` 或项目符号 `•` 进行清晰分段；\n"
-        "3. **魔方状态实时感知**：系统已在下方提供【当前 3D 虚拟魔方实时状态】（包括是否已复原或打乱）。当用户询问魔方是否复原、当前状态或如何还原时，必须根据该实时信息据实回答，不可胡乱假设；\n"
-        "4. **专业准确**：精通三阶魔方解法（新手层先法 7 阶段、CFOP 速拧、Kociemba 最优解）与手法要领；\n"
-        "5. **控制篇幅**：除非用户明确要求长篇理论推导，否则每次回答尽量保持在 80~180 字内，简明精要。"
+        "   - 魔方公式使用行内代码标出，例如 `R U R' U'`；\n"
+        "   - 分步骤使用编号列表 `1.` `2.` 简洁分段；\n"
+        "3. **魔方状态真实感知**：根据下方提供的【当前 3D 虚拟魔方实时状态】据实回答，不可胡乱假设；\n"
+        "4. **按「中心块颜色」精准回答各面颜色**：当用户询问某个颜色中心面（例如“蓝色中心面九个块分别是什么颜色”、“黄色面有哪些颜色”等）时，必须严格根据下方提供的【各中心面 3×3 真实九格颜色分布】中该中心块颜色对应的条目准确回答，该中心面的中心块必定就是该颜色；\n"
+        "5. **篇幅适中**：保持在 100~220 字内，清晰、亲切、易懂。"
     )
     if cube_context:
         prompt += f"\n\n【当前 3D 虚拟魔方实时状态】：\n{cube_context}"
@@ -112,7 +116,7 @@ async def request_chat_stream(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
                 if resp.status_code != 200:
                     err_bytes = await resp.aread()
@@ -173,7 +177,7 @@ async def request_chat_completion(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
             r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
             data = r.json()
@@ -207,13 +211,19 @@ async def request_narrations(method: str, steps: list[dict]) -> list[str] | None
         **_COMMON_HEADERS,
     }
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
             r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
         data = json.loads(content)
         if isinstance(data, list) and len(data) == len(steps):
-            return [str(x) for x in data]
+            result = []
+            for x in data:
+                if isinstance(x, dict):
+                    result.append(str(x.get("narration") or x.get("explanation") or x.get("text") or x))
+                else:
+                    result.append(str(x))
+            return result
     except Exception:
         return None
     return None

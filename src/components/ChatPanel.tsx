@@ -4,9 +4,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Compass,
   Eye,
   EyeOff,
-  Globe,
   KeyRound,
   ListFilter,
   RefreshCw,
@@ -15,7 +15,6 @@ import {
   Send,
   Settings,
   Sparkles,
-  Terminal,
   Volume2,
   VolumeX,
   Wand2,
@@ -32,16 +31,14 @@ export interface ChatMessage {
   reasoning?: string;
   emotionId?: string;
   toolCalls?: string[];
-  solution?: any;
+  solution?: Record<string, unknown>;
   timestamp: string;
 }
 
 export interface ChatPanelProps {
   open: boolean;
   onToggle: (open: boolean) => void;
-  onApplySolution?: (solution: any) => void;
-  onScramble?: () => void;
-  onReset?: () => void;
+  onApplySolution?: (solution: Record<string, unknown>) => void;
   getCubeState?: () => string;
   isSolved?: boolean;
   onWidthChange?: (width: number) => void;
@@ -170,13 +167,11 @@ export function ChatPanel({
   open,
   onToggle,
   onApplySolution,
-  onScramble,
-  onReset,
   getCubeState,
   isSolved = false,
   onWidthChange,
 }: ChatPanelProps) {
-  const DEFAULT_PANEL_WIDTH = 380;
+  const DEFAULT_PANEL_WIDTH = 420;
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
 
   // Reset to default width when reopened
@@ -243,8 +238,8 @@ export function ChatPanel({
   const [statusText, setStatusText] = useState("待机中");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(true);
-  const [method, setMethod] = useState<"beginner" | "cfop" | "kociemba">("beginner");
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [method] = useState<"beginner" | "cfop" | "kociemba">("beginner");
   const avatarRef = useRef<EmotionBallAvatarRef>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -295,16 +290,37 @@ export function ChatPanel({
   const dragStartTriggerRef = useRef({ startY: 0, initialTop: 0 });
   const hasMovedTriggerRef = useRef(false);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "init-1",
-      role: "agent",
-      content:
-        "你好！我是你的 **魔方助手** 🤖\n\n已接入 **MCP 协议** 与三阶魔方求解引擎，为你提供：\n• **新手层先法（LBL）** 分步伴学\n• **CFOP 进阶速拧** 还原指导\n• **Kociemba 最优解** 极速求解\n\n💡 点击右上角 `⚙️ 设置` 可配置或切换您的大模型 API。你可以随时向我提问或点击下方快捷指令开始！",
-      emotionId: "10",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    },
-  ]);
+  const DEFAULT_WELCOME_MSG: ChatMessage = {
+    id: "init-1",
+    role: "agent",
+    content:
+      "你好！我是你的 **魔方助手** 🤖\n\n已接入 **MCP 协议** 与三阶魔方求解引擎，为你提供：\n• **新手层先法（LBL）** 分步伴学\n• **CFOP 进阶速拧** 还原指导\n• **Kociemba 最优解** 极速求解\n\n💡 点击右上角 `⚙️ 设置` 可配置或切换您的大模型 API。你可以随时向我提问或点击下方快捷指令开始！",
+    emotionId: "10",
+    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  };
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem("cubetutor-chat-history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [DEFAULT_WELCOME_MSG];
+  });
+
+  // Automatically persist chat history to localStorage
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        const slice = messages.slice(-60);
+        localStorage.setItem("cubetutor-chat-history", JSON.stringify(slice));
+      }
+    } catch {}
+  }, [messages]);
 
   // Fetch initial config from backend
   const loadConfig = async () => {
@@ -357,30 +373,76 @@ export function ChatPanel({
     }
   }, [isSolved]);
 
-  const playTTS = async (text: string) => {
-    if (!ttsEnabled) return;
-    try {
-      const resp = await fetch(`/api/tts?text=${encodeURIComponent(text.slice(0, 100))}`);
-      if (resp.ok && resp.status === 200) {
-        const blob = await resp.blob();
-        const audio = new Audio(URL.createObjectURL(blob));
-        audio.play().catch(() => {});
-      }
-    } catch {}
+  // Browser Native Web Speech API (TTS)
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
+  const speakText = (text: string, msgId?: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    if (speakingMsgId && (!msgId || speakingMsgId === msgId)) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    // Clean text of markdown formatting for natural, fluent voice reading
+    const cleanText = text
+      .replace(/[*#`_~[\]()]/g, " ")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[👉💡🤖🔧✨•]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "zh-CN";
+    utterance.rate = 1.05; // Lively friendly rate for children/learners
+    utterance.pitch = 1.1; // Warm friendly pitch
+
+    if (msgId) setSpeakingMsgId(msgId);
+
+    utterance.onend = () => {
+      setSpeakingMsgId(null);
+    };
+    utterance.onerror = () => {
+      setSpeakingMsgId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleToggleTts = () => {
+    const next = !ttsEnabled;
+    setTtsEnabled(next);
+    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+    }
   };
 
   const handleClearHistory = () => {
-    setMessages([
-      {
-        id: "init-" + Date.now(),
-        role: "agent",
-        content: "对话已重置。请问有什么可以帮助你的吗？随时点击下方快捷指令开始教学！",
-        emotionId: "02",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
-    setEmotion("02");
-    setStatusText("待机中");
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+    }
+    const resetMsg: ChatMessage = {
+      ...DEFAULT_WELCOME_MSG,
+      id: "init-" + Date.now(),
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages([resetMsg]);
+    setEmotion("10");
+    setStatusText(isSolved ? "复原完成 🎉" : "待机中");
+    try {
+      localStorage.removeItem("cubetutor-chat-history");
+    } catch {
+      // ignore storage errors
+    }
   };
 
   // Provider change handler
@@ -490,8 +552,9 @@ export function ChatPanel({
       } else {
         setTestResult({ ok: false, msg: `服务响应错误 (${resp?.status || "网络异常"})` });
       }
-    } catch (e: any) {
-      setTestResult({ ok: false, msg: `请求异常: ${e.message || e}` });
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      setTestResult({ ok: false, msg: `请求异常: ${err}` });
     } finally {
       setTesting(false);
     }
@@ -529,8 +592,9 @@ export function ChatPanel({
           setSettingsOpen(false);
         }, 1200);
       }
-    } catch (e: any) {
-      alert("保存失败: " + e.message);
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      alert("保存失败: " + err);
     } finally {
       setSaving(false);
     }
@@ -554,13 +618,13 @@ export function ChatPanel({
       id: agentMsgId,
       role: "agent",
       content: "",
-      emotionId: "30",
+      emotionId: "03",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
     setMessages((prev) => [...prev, userMsgObj, initialAgentMsgObj]);
     setLoading(true);
-    setEmotion("30"); // 思考中
+    setEmotion("03"); // 思考中 (好奇灵动大圆眼)
     setStatusText("AI 思考中...");
 
     try {
@@ -628,15 +692,15 @@ export function ChatPanel({
                   onApplySolution(data.solution);
                 }
               }
-              if (finalEmotion === "34") {
+              if (finalEmotion === "33" || finalEmotion === "10") {
                 setStatusText("教学讲解中 🎓");
-              } else if (finalEmotion === "32") {
+              } else if (finalEmotion === "34") {
                 setStatusText("状态异常 ⚠️");
               }
             } else if (data.type === "reasoning") {
               accumulatedReasoning += data.chunk;
               setStatusText("深度思考中 💭");
-              setEmotion("30");
+              setEmotion("03");
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === agentMsgId
@@ -644,7 +708,7 @@ export function ChatPanel({
                         ...m,
                         content: accumulatedText,
                         reasoning: accumulatedReasoning,
-                        emotionId: "30",
+                        emotionId: "03",
                         toolCalls,
                         solution,
                       }
@@ -674,20 +738,21 @@ export function ChatPanel({
       }
 
       setEmotion(finalEmotion);
-      setStatusText(finalEmotion === "34" ? "教学讲解中 🎓" : "就绪");
+      setStatusText(finalEmotion === "33" ? "教学讲解中 🎓" : "就绪");
 
-      if (accumulatedText) {
-        playTTS(accumulatedText.split("\n")[0]);
+      if (ttsEnabled && accumulatedText) {
+        speakText(accumulatedText, agentMsgId);
       }
-    } catch (e: any) {
-      setEmotion("32");
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      setEmotion("34");
       setStatusText("连接错误");
       setMessages((prev) =>
         prev.map((m) =>
           m.id === agentMsgId
             ? {
                 ...m,
-                content: `抱歉，请求后端 Agent 服务时发生错误：${e.message || e}。请确认 FastAPI 后端已正常运行。`,
+                content: `抱歉，请求后端 Agent 服务时发生错误：${err}。请确认 FastAPI 后端已正常运行。`,
                 emotionId: "32",
               }
             : m
@@ -793,17 +858,24 @@ export function ChatPanel({
           <div className="chat-header-actions">
             <button
               className="icon-btn"
-              title="大模型 API 配置"
-              onClick={() => setSettingsOpen(true)}
+              title="重置对话上下文（从头开始）"
+              onClick={handleClearHistory}
             >
-              <Settings size={16} />
+              <RotateCcw size={15} />
             </button>
             <button
               className={`icon-btn ${ttsEnabled ? "active" : ""}`}
               title={ttsEnabled ? "关闭语音伴读" : "开启语音伴读"}
-              onClick={() => setTtsEnabled(!ttsEnabled)}
+              onClick={handleToggleTts}
             >
               {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            <button
+              className="icon-btn"
+              title="大模型 API 配置"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings size={16} />
             </button>
             <button
               className="icon-btn"
@@ -833,34 +905,50 @@ export function ChatPanel({
                 )}
                 <div className="bubble-content">
                   {/* MCP Tool Call Trace (Mainstream Agent Style) */}
-                  {m.toolCalls && m.toolCalls.length > 0 && (
-                    <div className="mcp-agent-section">
-                      <button
-                        type="button"
-                        className="mcp-agent-toggle"
-                        onClick={() => toggleMcp(m.id)}
-                      >
-                        <span className="mcp-summary-text">已调用 {m.toolCalls.length} 次 MCP</span>
-                        <ChevronDown
-                          size={13}
-                          className={`mcp-arrow ${expandedMcp[m.id] ? "open" : ""}`}
-                        />
-                      </button>
-                      {expandedMcp[m.id] && (
-                        <div className="mcp-agent-list">
-                          {m.toolCalls.map((t, tIdx) => (
-                            <div key={tIdx} className="mcp-agent-item">
-                              <Wrench size={13} className="mcp-wrench-icon" />
-                              <span className="mcp-item-text">
-                                调用 <span className="mcp-path">mcp.cubetutor / {t}</span>
-                              </span>
-                              <ChevronRight size={12} className="mcp-item-arrow" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {m.toolCalls && m.toolCalls.length > 0 && (() => {
+                    const groups: { name: string; count: number }[] = [];
+                    for (const t of m.toolCalls) {
+                      const last = groups[groups.length - 1];
+                      if (last && last.name === t) {
+                        last.count++;
+                      } else {
+                        groups.push({ name: t, count: 1 });
+                      }
+                    }
+                    return (
+                      <div className="mcp-agent-section">
+                        <button
+                          type="button"
+                          className="mcp-agent-toggle"
+                          onClick={() => toggleMcp(m.id)}
+                        >
+                          <span className="mcp-summary-text">已调用 {groups.length} 次 MCP</span>
+                          <ChevronDown
+                            size={13}
+                            className={`mcp-arrow ${expandedMcp[m.id] ? "open" : ""}`}
+                          />
+                        </button>
+                        {expandedMcp[m.id] && (
+                          <div className="mcp-agent-list">
+                            {groups.map((g, gIdx) => (
+                              <div key={gIdx} className="mcp-agent-item">
+                                <Wrench size={13} className="mcp-wrench-icon" />
+                                <span className="mcp-item-text">
+                                  调用 <span className="mcp-path">mcp.cubetutor / {g.name}</span>
+                                  {g.count > 1 && (
+                                    <span style={{ color: "#64748b", marginLeft: 4, fontSize: "0.85em" }}>
+                                      (执行推演 ×{g.count} 步)
+                                    </span>
+                                  )}
+                                </span>
+                                <ChevronRight size={12} className="mcp-item-arrow" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* DeepSeek R1 Style Live Thought Process Card (Default Collapsed) */}
                   {m.reasoning && (
@@ -908,7 +996,19 @@ export function ChatPanel({
                     </div>
                   ) : null}
 
-                  <span className="bubble-time">{m.timestamp}</span>
+                  <div className="bubble-footer-row">
+                    <span className="bubble-time">{m.timestamp}</span>
+                    {m.role === "agent" && m.content && (
+                      <button
+                        type="button"
+                        className={`bubble-voice-btn ${speakingMsgId === m.id ? "speaking" : ""}`}
+                        title={speakingMsgId === m.id ? "停止语音朗读" : "语音朗读此回答"}
+                        onClick={() => speakText(m.content, m.id)}
+                      >
+                        {speakingMsgId === m.id ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -929,6 +1029,10 @@ export function ChatPanel({
           <button onClick={() => handleSend("检查当前魔方状态合法性")}>
             <CheckCircle2 size={13} />
             检查合法性
+          </button>
+          <button onClick={() => handleSend("下一步怎么做？")}>
+            <Compass size={13} />
+            下一步怎么做
           </button>
         </div>
 
@@ -1057,6 +1161,20 @@ export function ChatPanel({
               </div>
 
               <div className="settings-modal-footer">
+                <button
+                  type="button"
+                  className="test-btn"
+                  style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
+                  title="清空当前所有对话历史"
+                  onClick={() => {
+                    if (window.confirm("确定要清空所有对话历史吗？")) {
+                      handleClearHistory();
+                      setSettingsOpen(false);
+                    }
+                  }}
+                >
+                  清空历史
+                </button>
                 <button
                   type="button"
                   className="test-btn"

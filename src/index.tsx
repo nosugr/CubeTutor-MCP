@@ -21,7 +21,6 @@ import {
   Layers,
   FastForward,
   HelpCircle,
-  History,
   Home,
   Info,
   ListChecks,
@@ -41,6 +40,7 @@ import {
   SkipForward,
   SlidersHorizontal,
   Sparkles,
+  Timer,
   Trash2,
   Wand2,
   X,
@@ -53,7 +53,6 @@ import { COLORS, FACE } from "./cuber/define";
 import { PaletteData, PreferanceData } from "./data";
 import { TwistAction, TwistNode } from "./cuber/twister";
 import Toucher from "./vue/Viewport/toucher";
-import Rubic from "./vue/Playground/rubic";
 import Solver, { SolveMethod, SolveResult } from "./solver/Solver";
 import {
   FACE_COLORS,
@@ -758,7 +757,12 @@ function BrandLogo() {
         <span style={{ color: "#facc15" }}>S</span>
         <span className="logo-cube-word"> CUBE</span>
       </div>
-      <div className="logo-subtext">CubeTutor · 智能魔方</div>
+      <div className="logo-subtext">
+        <span className="sub-cube">Cube</span>
+        <em className="sub-tutor">Tutor</em>
+        <span className="sub-divider"> · </span>
+        <span className="sub-cn">智能魔方</span>
+      </div>
     </div>
   );
 }
@@ -781,7 +785,7 @@ function SceneShell({
   const viewport = useRef<ViewportHandle>(null);
   const { width, height } = useWindowSize();
   const [chatOpen, setChatOpen] = useState(true);
-  const [chatWidth, setChatWidth] = useState(380);
+  const [chatWidth, setChatWidth] = useState(420);
 
   useEffect(() => {
     const panelW = chatOpen && width > 960 ? chatWidth : 0;
@@ -829,7 +833,6 @@ function Playground() {
   const data = useMemo(() => new PlaygroundData(), []);
   const [, force] = useState(0);
   const [scrambleOpen, setScrambleOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [link, setLink] = useState("");
   const [done, setDone] = useState(false);
@@ -837,16 +840,16 @@ function Playground() {
   const sync = useCallback(() => {
     data.scene = ctx.world.cube.history.init;
     data.history = ctx.world.cube.history.exp.substring(1);
-    if (!data.complete) {
-      data.complete = ctx.world.cube.complete;
-      if (data.complete) setDone(true);
+    const isComplete = ctx.world.cube.complete;
+    if (!data.complete && isComplete && ctx.world.cube.history.moves > 0) {
+      setDone(true);
     }
+    data.complete = isComplete;
     data.save();
     force((i) => i + 1);
   }, [ctx.world, data]);
 
   const scramble = useCallback(() => {
-    data.complete = true;
     if (data.scrambler === "*") ctx.world.cube.twister.twist(new TwistAction("*"), true, true);
     else ctx.world.cube.twister.setup(data.scrambler);
     data.complete = ctx.world.cube.complete;
@@ -863,6 +866,7 @@ function Playground() {
     ctx.world.order = data.order;
     ctx.world.cube.twister.setup(data.scene);
     for (const action of new TwistNode(data.history).parse()) ctx.world.cube.twister.twist(action, true, true);
+    data.complete = ctx.world.cube.complete;
     sync();
   }, [ctx.world, data, scramble, sync]);
 
@@ -882,15 +886,16 @@ function Playground() {
       ctx.world.cube.dirty = true;
       ctx.world.cube.updateMatrix();
     }
-    if (!data.complete) {
-      if (ctx.world.cube.history.moves === 0) {
+    if (!data.complete && ctx.world.cube.history.moves > 0) {
+      if (data.start === 0) data.start = Date.now();
+      data.now = Date.now();
+      force((i) => i + 1);
+    } else if (ctx.world.cube.history.moves === 0) {
+      if (data.start !== 0 || data.now !== 0) {
         data.start = 0;
         data.now = 0;
-      } else {
-        if (data.start === 0) data.start = Date.now();
-        data.now = Date.now();
+        force((i) => i + 1);
       }
-      force((i) => i + 1);
     }
   });
 
@@ -906,6 +911,14 @@ function Playground() {
     setShareOpen(true);
   };
 
+  const resetTimer = useCallback(() => {
+    data.start = 0;
+    data.now = 0;
+    ctx.world.cube.history.clear();
+    ctx.world.cube.twister.redoList = [];
+    sync();
+  }, [ctx.world, data, sync]);
+
   return (
     <SceneShell
       ctx={ctx}
@@ -917,28 +930,47 @@ function Playground() {
         scramble();
       }}
     >
-      <div className="score-pill">{formatScore(data.start, data.now, ctx.world.cube.history.moves)}</div>
       {prefix && <div className="key-pill">{prefix}</div>}
       <div className="bottom-panel">
-        <div className="toolbar primary-toolbar">
-          <IconButton title="重新打乱" onClick={() => setScrambleOpen(true)}><Shuffle /></IconButton>
-          <IconButton title="历史" onClick={() => setHistoryOpen(true)}><History /></IconButton>
-          <IconButton title="撤销" disabled={ctx.world.cube.history.length === 0} onClick={() => ctx.world.cube.twister.undo()}><RotateCcw /></IconButton>
-          <IconButton title="分享" onClick={share}><Share2 /></IconButton>
+        <div className="toolbar primary-toolbar playground-toolbar">
+          <div
+            className="score-pill-inline clickable"
+            title="点击重置计时与步数"
+            onClick={resetTimer}
+          >
+            <Timer size={15} style={{ opacity: 0.75, marginRight: 6 }} />
+            <span>{formatScore(data.start, data.now, ctx.world.cube.history.moves)}</span>
+          </div>
+          <div className="toolbar-actions">
+            <IconButton title="重新打乱" onClick={() => setScrambleOpen(true)}><Shuffle /></IconButton>
+            <IconButton
+              title="上一步 (撤销)"
+              disabled={ctx.world.cube.history.length === 0}
+              onClick={() => {
+                ctx.world.cube.twister.undo();
+                sync();
+              }}
+            >
+              <RotateCcw />
+            </IconButton>
+            <IconButton
+              title="下一步 (重做)"
+              disabled={!ctx.world.cube.twister.canRedo}
+              onClick={() => {
+                ctx.world.cube.twister.redo();
+                sync();
+              }}
+            >
+              <RotateCw />
+            </IconButton>
+            <IconButton title="分享" onClick={share}><Share2 /></IconButton>
+          </div>
+          <div className="playground-toolbar-placeholder" />
         </div>
       </div>
       <Modal title="重新打乱" open={scrambleOpen} onClose={() => setScrambleOpen(false)}>
         <textarea value={data.scrambler} onChange={(e) => { data.scrambler = e.target.value; force((i) => i + 1); }} />
         <div className="modal-actions"><button onClick={() => setScrambleOpen(false)}>取消</button><button className="danger" onClick={() => { setScrambleOpen(false); scramble(); }}>确定</button></div>
-      </Modal>
-      <Modal title="历史记录" open={historyOpen} onClose={() => setHistoryOpen(false)}>
-        <label>打乱<textarea readOnly value={data.scene} /></label>
-        <label>复原<textarea readOnly value={data.history} /></label>
-        <div className="modal-actions">
-          <button disabled={ctx.world.order > 3} onClick={() => { data.history = Rubic.adjust(data.history); data.save(); load(); }}>整理</button>
-          <button disabled={ctx.world.order > 3} onClick={() => { const ret = Rubic.niss(data.scene, data.history); data.scene = ret.scene; data.history = ret.history; data.save(); load(); }}>NISS</button>
-          <button onClick={share}>分享</button>
-        </div>
       </Modal>
       <Modal title="分享链接" open={shareOpen} onClose={() => setShareOpen(false)}>
         <textarea readOnly value={link} />

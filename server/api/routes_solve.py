@@ -10,9 +10,9 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from agent import tts as tts_mod
-from agent.agent import Agent
+from agent.agent import Agent, format_next_step_guide
 from core.session import get_shared_session
-from core.state import SOLVED
+from core.state import SOLVED, format_cube_layout_cn
 
 router = APIRouter()
 
@@ -58,6 +58,13 @@ async def stream_agent_chat(body: ChatBody) -> StreamingResponse:
     msg = body.message.strip()
     msg_lower = msg.lower()
     method = body.method or "beginner"
+    if "cfop" in msg_lower:
+        method = "cfop"
+    elif any(k in msg_lower for k in ["kociemba", "最少步", "极速"]):
+        method = "kociemba"
+    elif any(k in msg_lower for k in ["新手", "层先"]):
+        method = "beginner"
+
     session = get_shared_session()
 
     # Sync real-time 3D cube facelets state from client
@@ -65,7 +72,51 @@ async def stream_agent_chat(body: ChatBody) -> StreamingResponse:
         session.facelets = body.facelets
 
     async def event_generator():
-        # Check if user requests solving or tutorial
+        # 1. Check if user requests specific "Next Step" guidance
+        if any(k in msg_lower for k in ["下一步", "当前步", "怎么转", "指导一步", "走下一步", "提示一步", "接下来"]):
+            try:
+                current_state = session.facelets
+                if current_state == SOLVED:
+                    text = "🎉 **当前魔方已经完全复原！**\n无需进行任何转动，可以点击左下角重新打乱开始新的练习～"
+                    yield f"data: {json.dumps({'type': 'start', 'emotionId': '33', 'tool_calls': ['get_cube_state']}, ensure_ascii=False)}\n\n"
+                    for char in text:
+                        yield f"data: {json.dumps({'type': 'token', 'chunk': char}, ensure_ascii=False)}\n\n"
+                        await asyncio.sleep(0.015)
+                    yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                    return
+
+                agent = Agent()
+                out = await agent.solve_with_narration(method)
+                if not out.get("steps"):
+                    text = "🎉 **当前魔方已经完全复原！**"
+                    yield f"data: {json.dumps({'type': 'start', 'emotionId': '33', 'tool_calls': ['get_cube_state']}, ensure_ascii=False)}\n\n"
+                    for char in text:
+                        yield f"data: {json.dumps({'type': 'token', 'chunk': char}, ensure_ascii=False)}\n\n"
+                        await asyncio.sleep(0.015)
+                    yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                    return
+
+                first_step = out["steps"][0]
+                text = format_next_step_guide(first_step, method)
+                init_event = {
+                    "type": "start",
+                    "emotionId": "03",
+                    "tool_calls": ["get_cube_state", "get_solution", "apply_move"],
+                    "solution": out,
+                }
+                yield f"data: {json.dumps(init_event, ensure_ascii=False)}\n\n"
+                for char in text:
+                    yield f"data: {json.dumps({'type': 'token', 'chunk': char}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.015)
+                yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                return
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'start', 'emotionId': '32', 'tool_calls': ['get_cube_state']}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'token', 'chunk': f'获取下一步指导失败：{str(e)}'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                return
+
+        # 2. Check if user requests solving or full tutorial
         if any(k in msg_lower for k in ["求解", "还原", "教我", "怎么解", "开始教学", "解法", "帮我解", "solve", "help"]):
             try:
                 agent = Agent()
@@ -78,11 +129,15 @@ async def stream_agent_chat(body: ChatBody) -> StreamingResponse:
                 chosen_name = method_names.get(method, method)
                 first_step = out["steps"][0] if out["steps"] else None
                 narration_preview = first_step["narration"] if first_step else "准备就绪"
-
-                text = f"已通过 MCP 协议调取【{chosen_name}】求解器！\n共计算出 {len(out['steps'])} 步还原路径。\n\n👉 第一步：{narration_preview}，点击下方控制条即可逐步播放学习！"
+                text = (
+                    f"已通过 MCP 协议调取【{chosen_name}】求解器！\n共计算出 {len(out['steps'])} 步还原路径。\n\n"
+                    f"🧭 **标准握法**：请将 **白色中心面朝上 (顶面)**，**绿色中心面正对自己 (正面)**。\n"
+                    f"👉 **第一步**：{narration_preview}\n\n"
+                    f"💡 点击下方播放条即可逐步跟随 3D 动画与语音解法学习！"
+                )
                 init_event = {
                     "type": "start",
-                    "emotionId": "34",
+                    "emotionId": "33",
                     "tool_calls": out.get("tool_calls", ["get_cube_state", "validate_state", "get_solution"]),
                     "solution": out,
                 }
@@ -131,8 +186,8 @@ async def stream_agent_chat(body: ChatBody) -> StreamingResponse:
         current_state = session.facelets
         is_solved = current_state == SOLVED
         cube_info = (
-            f"魔方当前是否已完全复原: {'是 (已完全复原 Solved)' if is_solved else '否 (打乱未复原 Scrambled)'}\n"
-            f"当前 54 表面块状态编码: {current_state}"
+            f"魔方当前是否已完全复原: {'是 (已完全复原 Solved)' if is_solved else '否 (打乱未复原 Scrambled)'}\n\n"
+            f"{format_cube_layout_cn(current_state)}"
         )
 
         is_state_query = any(
@@ -187,11 +242,53 @@ async def agent_chat(body: ChatBody) -> dict:
     msg = body.message.strip()
     msg_lower = msg.lower()
     method = body.method or "beginner"
+    if "cfop" in msg_lower:
+        method = "cfop"
+    elif any(k in msg_lower for k in ["kociemba", "最少步", "极速"]):
+        method = "kociemba"
+    elif any(k in msg_lower for k in ["新手", "层先"]):
+        method = "beginner"
+
     session = get_shared_session()
 
     # Sync real-time 3D cube facelets state from client
     if body.facelets and len(body.facelets) == 54:
         session.facelets = body.facelets
+
+    # Check Next Step request
+    if any(k in msg_lower for k in ["下一步", "当前步", "怎么转", "指导一步", "走下一步", "提示一步", "接下来"]):
+        try:
+            current_state = session.facelets
+            if current_state == SOLVED:
+                return {
+                    "reply": "🎉 **当前魔方已经完全复原！**\n无需进行任何转动，可以点击左下角重新打乱开始新的练习～",
+                    "emotionId": "33",
+                    "tool_calls": ["get_cube_state"],
+                }
+
+            agent = Agent()
+            out = await agent.solve_with_narration(method)
+            if not out.get("steps"):
+                return {
+                    "reply": "🎉 **当前魔方已经完全复原！**",
+                    "emotionId": "33",
+                    "tool_calls": ["get_cube_state"],
+                }
+
+            first_step = out["steps"][0]
+            reply = format_next_step_guide(first_step, method)
+            return {
+                "reply": reply,
+                "emotionId": "03",
+                "tool_calls": ["get_cube_state", "get_solution", "apply_move"],
+                "solution": out,
+            }
+        except Exception as e:
+            return {
+                "reply": f"获取下一步指导失败：{str(e)}",
+                "emotionId": "32",
+                "tool_calls": ["get_cube_state"],
+            }
 
     # Check solve request
     if any(k in msg_lower for k in ["求解", "还原", "教我", "怎么解", "开始教学", "解法", "帮我解", "solve", "help"]):
@@ -206,18 +303,22 @@ async def agent_chat(body: ChatBody) -> dict:
             chosen_name = method_names.get(method, method)
             first_step = out["steps"][0] if out["steps"] else None
             narration_preview = first_step["narration"] if first_step else "准备就绪"
-
-            reply = f"已通过 MCP 协议调取【{chosen_name}】求解器！\n共计算出 {len(out['steps'])} 步还原路径。\n\n👉 第一步：{narration_preview}，点击下方控制条即可逐步播放学习！"
+            reply = (
+                f"已通过 MCP 协议调取【{chosen_name}】求解器！\n共计算出 {len(out['steps'])} 步还原路径。\n\n"
+                f"🧭 **标准握法**：请将 **白色中心面朝上 (顶面)**，**绿色中心面正对自己 (正面)**。\n"
+                f"👉 **第一步**：{narration_preview}\n\n"
+                f"💡 点击下方播放条即可逐步跟随 3D 动画与语音解法学习！"
+            )
             return {
                 "reply": reply,
-                "emotionId": "34",
+                "emotionId": "33",
                 "tool_calls": out.get("tool_calls", ["get_cube_state", "validate_state", "get_solution"]),
                 "solution": out,
             }
         except Exception as e:
             return {
                 "reply": f"求解发生异常：{str(e)}",
-                "emotionId": "32",
+                "emotionId": "34",
                 "tool_calls": ["get_cube_state"],
             }
 
@@ -248,8 +349,8 @@ async def agent_chat(body: ChatBody) -> dict:
     current_state = session.facelets
     is_solved = current_state == SOLVED
     cube_info = (
-        f"魔方当前是否已完全复原: {'是 (已完全复原 Solved)' if is_solved else '否 (打乱未复原 Scrambled)'}\n"
-        f"当前 54 表面块状态编码: {current_state}"
+        f"魔方当前是否已完全复原: {'是 (已完全复原 Solved)' if is_solved else '否 (打乱未复原 Scrambled)'}\n\n"
+        f"{format_cube_layout_cn(current_state)}"
     )
 
     is_state_query = any(

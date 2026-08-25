@@ -73,18 +73,50 @@ def _perm_parity(perm: list[int]) -> int:
     return odd
 
 
+# 24 valid rotational orientations of the 6 centers (SO(3) group)
+_VALID_CENTER_ORIENTATIONS = {
+    "URFDLB", "UFLDBR", "ULBDRF", "UBRDFL",
+    "DRBULF", "DBLUFR", "DLFURB", "DFRUBL",
+    "FRDBLU", "FDLBUR", "FLUBRD", "FURBDL",
+    "BRUFLD", "BULFDR", "BLDFRU", "BDRFUL",
+    "LUFRDB", "LFDRBU", "LDBRUF", "LBURFD",
+    "RDFLUB", "RFULBD", "RUBLDF", "RBDFLU",
+}
+
+
+def normalize_centers(facelets: str) -> str:
+    """Normalize facelets so that center pieces map to URFDLB respectively."""
+    if len(facelets) != 54:
+        return facelets
+    centers = [facelets[i] for i in (4, 13, 22, 31, 40, 49)]
+    if len(set(centers)) == 6:
+        cmap = {
+            centers[0]: "U",
+            centers[1]: "R",
+            centers[2]: "F",
+            centers[3]: "D",
+            centers[4]: "L",
+            centers[5]: "B",
+        }
+        return "".join(cmap.get(c, c) for c in facelets)
+    return facelets
+
+
 def validate_state(facelets: str) -> tuple[bool, str | None]:
     """Return (ok, reason_code). reason_code is None when ok."""
     if len(facelets) != 54:
         return False, "length"
 
+    centers_str = "".join(facelets[i] for i in (4, 13, 22, 31, 40, 49))
+    if centers_str not in _VALID_CENTER_ORIENTATIONS:
+        return False, "centers"
+
+    if centers_str != "URFDLB":
+        facelets = normalize_centers(facelets)
+
     for color in "URFDLB":
         if facelets.count(color) != 9:
             return False, "color_count"
-
-    # Centers are fixed on a real cube and define face orientation.
-    if [facelets[i] for i in (4, 13, 22, 31, 40, 49)] != list("URFDLB"):
-        return False, "centers"
 
     # --- corners ---
     cp = [-1] * 8

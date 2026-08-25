@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from core.state import SOLVED, apply_move
-from core.validate import validate_state
+from core.validate import normalize_centers, validate_state
 from solvers import get_solver
 
 
@@ -32,7 +32,8 @@ class CubeSession:
         return self.validate_state(facelets)
 
     def get_solution(self, method: str) -> dict:
-        sol = get_solver(method).solve(self.facelets)
+        norm_state = normalize_centers(self.facelets)
+        sol = get_solver(method).solve(norm_state)
         return {
             "method": sol.method,
             "steps": [asdict(step) for step in sol.steps],

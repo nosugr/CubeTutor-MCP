@@ -211,6 +211,10 @@ export class TwistNode {
 export default class Twister {
   private cube: Cube;
   private queue: TwistAction[] = [];
+  public redoList: TwistAction[] = [];
+  private isUndoing = false;
+  private isRedoing = false;
+
   constructor(cube: Cube) {
     this.cube = cube;
     this.cube.callbacks.push(this.update);
@@ -251,6 +255,14 @@ export default class Twister {
     return this.queue.length;
   }
 
+  get canRedo(): boolean {
+    return this.redoList.length > 0;
+  }
+
+  get redoLength(): number {
+    return this.redoList.length;
+  }
+
   finish(): void {
     while (this.queue.length > 0) {
       tweener.finish();
@@ -261,6 +273,7 @@ export default class Twister {
   setup(exp: string, reverse = false, times = 1): void {
     this.finish();
     this.cube.reset();
+    this.redoList = [];
     const node = new TwistNode(exp, reverse, times);
     const list = node.parse();
     for (const action of list) {
@@ -299,6 +312,9 @@ export default class Twister {
   };
 
   twist(action: TwistAction, fast: boolean, force: boolean): boolean {
+    if (!this.isUndoing && !this.isRedoing) {
+      this.redoList = [];
+    }
     let success = false;
     if (action.sign == "#") {
       this.setup("");
@@ -361,7 +377,29 @@ export default class Twister {
       return;
     }
     const last = this.cube.history.last;
+    this.redoList.push(new TwistAction(last.sign, last.reverse, 1));
     const reverse = new TwistAction(last.sign, !last.reverse, 1);
-    this.twist(reverse, false, true);
+    this.isUndoing = true;
+    try {
+      this.twist(reverse, false, true);
+    } finally {
+      this.isUndoing = false;
+    }
+  }
+
+  redo(): void {
+    if (this.redoList.length === 0) {
+      return;
+    }
+    const next = this.redoList.pop();
+    if (!next) {
+      return;
+    }
+    this.isRedoing = true;
+    try {
+      this.twist(next, false, true);
+    } finally {
+      this.isRedoing = false;
+    }
   }
 }

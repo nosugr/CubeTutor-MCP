@@ -71,3 +71,66 @@ def apply_move(facelets: str, move: str) -> str:
     for _ in range(turns):
         _apply_cycles(arr, cycles)
     return "".join(arr)
+
+
+_COLOR_MAP_CN = {
+    "U": "白色",
+    "R": "红色",
+    "F": "绿色",
+    "D": "黄色",
+    "L": "橙色",
+    "B": "蓝色",
+}
+
+_FACE_NAMES_CN = {
+    "U": "顶面 (Up)",
+    "R": "右面 (Right)",
+    "F": "正面 (Front)",
+    "D": "底面 (Down)",
+    "L": "左面 (Left)",
+    "B": "背面 (Back)",
+}
+
+_FACE_SLICES = {
+    "U": 0,
+    "R": 9,
+    "F": 18,
+    "D": 27,
+    "L": 36,
+    "B": 45,
+}
+
+
+def format_cube_layout_cn(facelets: str) -> str:
+    """Format 54-facelet state into clear Chinese 3x3 face descriptions indexed by center color."""
+    if len(facelets) != 54:
+        return f"当前状态编码: {facelets}"
+
+    faces_data = {}
+    for face_code, start_idx in _FACE_SLICES.items():
+        slice_9 = facelets[start_idx : start_idx + 9]
+        colors = [_COLOR_MAP_CN.get(c, c) for c in slice_9]
+        center_color = colors[4]
+        faces_data[face_code] = {
+            "pos_name": _FACE_NAMES_CN[face_code],
+            "center_color": center_color,
+            "row1": " ".join(colors[0:3]),
+            "row2": " ".join(colors[3:6]),
+            "row3": " ".join(colors[6:9]),
+        }
+
+    lines = ["【各中心面 3×3 真实九格颜色分布（按中心块颜色精准索引）】："]
+    for face_code, info in faces_data.items():
+        cc = info["center_color"]
+        pos = info["pos_name"]
+        r1 = info["row1"]
+        r2 = info["row2"]
+        r3 = info["row3"]
+        lines.append(
+            f"- 【{cc}中心面】(处于物理 {pos} 位置，中心块为 {cc})：\n"
+            f"  上排: {r1}\n"
+            f"  中排: {r2}\n"
+            f"  下排: {r3}"
+        )
+
+    return "\n".join(lines)

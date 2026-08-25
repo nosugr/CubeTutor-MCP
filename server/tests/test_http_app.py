@@ -43,3 +43,21 @@ def test_move():
     r = client.post("/api/move", json={"move": "R"})
     assert r.status_code == 200
     assert r.json()["facelets"] != SOLVED
+
+
+def test_agent_stream_chat_solve():
+    # Apply 1 move
+    client.post("/api/move", json={"move": "R"})
+    r = client.post("/api/agent/stream_chat", json={"message": "帮我用新手层先法还原魔方", "method": "beginner"})
+    assert r.status_code == 200
+    assert "data: " in r.text
+    assert "求解器" in r.text or "start" in r.text
+
+
+def test_agent_chat_solve():
+    client.post("/api/move", json={"move": "R"})
+    r = client.post("/api/agent/chat", json={"message": "帮我用新手层先法还原魔方", "method": "beginner"})
+    assert r.status_code == 200
+    assert "solution" in r.json()
+    assert len(r.json()["solution"]["steps"]) > 0
+
