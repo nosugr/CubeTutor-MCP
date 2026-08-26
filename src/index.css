@@ -1143,10 +1143,6 @@ button:disabled {
  * ============================================================ */
 
 .scanner-modal {
-  width: min(980px, calc(100vw - 32px)) !important;
-  max-width: 980px !important;
-  height: min(720px, calc(100vh - 36px)) !important;
-  max-height: calc(100vh - 36px) !important;
   padding: 0 !important;
   margin: 0 !important;
   overflow: hidden !important;
@@ -1155,31 +1151,55 @@ button:disabled {
   border-radius: 12px !important;
 }
 
+/* 1. 引导说明阶段 (Intro)：小巧紧凑自适应 */
+.scanner-modal.phase-intro {
+  width: min(540px, calc(100vw - 32px)) !important;
+  max-width: 540px !important;
+  height: auto !important;
+  max-height: calc(100vh - 40px) !important;
+  padding: 12px 18px 16px !important;
+}
+
 .scanner-intro {
-  padding: 24px;
+  padding: 6px 2px 2px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  flex: 1 1 auto;
-  overflow-y: auto;
+  gap: 12px;
 }
 
 .scanner-intro p {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13.5px;
+  line-height: 1.65;
   color: var(--text);
   margin: 0;
 }
 
 .scanner-tips {
-  padding-left: 20px;
+  padding-left: 18px;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12.5px;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.55;
+}
+
+/* 2. 视频采集阶段 (Capture)：大屏左右分栏 */
+.scanner-modal.phase-capture {
+  width: min(980px, calc(100vw - 32px)) !important;
+  max-width: 980px !important;
+  height: min(720px, calc(100vh - 36px)) !important;
+  max-height: calc(100vh - 36px) !important;
+}
+
+/* 3. 展开图校对阶段 (Review)：适中宽度 */
+.scanner-modal.phase-review {
+  width: min(780px, calc(100vw - 32px)) !important;
+  max-width: 780px !important;
+  height: auto !important;
+  max-height: calc(100vh - 36px) !important;
+  padding: 12px 16px !important;
 }
 
 .scanner-capture {
@@ -1342,6 +1362,8 @@ button:disabled {
 .scanner-prompt-bar {
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -1423,53 +1445,6 @@ button:disabled {
   gap: 4px;
 }
 
-.scanner-locked-box {
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px dashed rgba(34, 197, 94, 0.6);
-  background: rgba(34, 197, 94, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.locked-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.locked-tag {
-  font-size: 11.5px;
-  font-weight: 800;
-  color: #16a34a;
-}
-
-.locked-clear-btn {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.locked-clear-btn:hover {
-  background: var(--primary-weak);
-  color: var(--primary);
-}
-
-.locked-tip {
-  font-size: 11px;
-  color: var(--muted);
-  margin: 0;
-  line-height: 1.35;
-}
-
 .scanner-quick-tips {
   padding: 8px 10px;
   border-radius: 6px;
@@ -1492,6 +1467,92 @@ button:disabled {
 .tip-key {
   font-weight: 700;
   color: var(--text);
+}
+
+/* 朝向指引规则卡片 */
+.scanner-orientation-card {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.orientation-card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.orientation-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.orientation-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.orientation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.orientation-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 120ms ease;
+  user-select: none;
+}
+
+.orientation-chip:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.orientation-chip.active {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.chip-badge {
+  width: 19px;
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.chip-arrow {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.orientation-chip.active .chip-arrow {
+  color: #ffffff;
+  font-weight: bold;
 }
 
 /* 底部操作栏 */

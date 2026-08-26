@@ -1423,7 +1423,7 @@ function ScannerPanel({
   const suggestedFace: FaceKey = target ?? (liveGridRef.current.length === 9 ? identifyFace(liveGridRef.current) : currentTarget);
 
   return (
-    <Modal title="魔方状态录入" open={open} onClose={onClose} className="scanner-modal">
+    <Modal title="魔方状态录入" open={open} onClose={onClose} className={`scanner-modal phase-${phase}`}>
       <video ref={videoRef} className="scanner-video-hidden" playsInline muted />
       {error && <div className="scanner-error">{error}</div>}
 
@@ -1540,38 +1540,46 @@ function ScannerPanel({
                 </div>
               </div>
 
-              {locked ? (
-                <div className="scanner-locked-box">
-                  <div className="locked-header">
-                    <span className="locked-tag">✨ 已锁定 {locked.face} 面</span>
-                    <button type="button" className="locked-clear-btn" onClick={rediscover}>
-                      <RefreshCw size={12} /> 重新搜索
-                    </button>
-                  </div>
-                  <p className="locked-tip">已锁定 {locked.face} 面分布，可松开魔方后点击“采集锁定”录入</p>
-                </div>
-              ) : (
-                <div className="scanner-locked-box" style={{ background: "rgba(0,0,0,0.02)", borderStyle: "dashed" }}>
-                  <div className="locked-header">
-                    <span style={{ fontSize: "12px", color: "var(--muted)" }}>面锁定状态</span>
-                    <button type="button" className="locked-clear-btn" onClick={rediscover}>
-                      <RefreshCw size={12} /> 寻找魔方
-                    </button>
-                  </div>
-                  <p className="locked-tip" style={{ color: "var(--muted)" }}>尚未锁定，对准稳定后将自动锁定当前面</p>
-                </div>
-              )}
-
               <div className="scanner-quick-tips">
                 <div className="tip-item">
                   <span className="tip-key">⚡ 快捷录入：</span>
                   <span>对准稳定后按 <strong>空格键 (Space)</strong> 快速完成采集</span>
                 </div>
-                <div className="tip-item">
-                  <span className="tip-key">📐 朝向指引：</span>
-                  <div style={{ marginTop: "4px", fontSize: "12px" }}>
-                    {FACE_ORIENTATION_HINTS[suggestedFace]}
-                  </div>
+              </div>
+
+              <div className="scanner-orientation-card">
+                <div className="orientation-card-header">
+                  <Compass size={14} className="orientation-icon" />
+                  <span>朝向指引</span>
+                </div>
+                <div className="orientation-subtitle">面朝向规则（正对镜头 → 朝上）</div>
+                <div className="orientation-grid">
+                  {(["U", "R", "F", "D", "L", "B"] as FaceKey[]).map((f) => {
+                    const top = ON_TOP_FACE[f];
+                    const isActive = suggestedFace === f;
+                    return (
+                      <div
+                        key={f}
+                        className={`orientation-chip ${isActive ? "active" : ""}`}
+                        onClick={() => setTarget(f)}
+                        title={`正对 ${f} 面 (${FACE_NAMES_CN[f]})，${top} 面 (${FACE_NAMES_CN[top]}) 朝上`}
+                      >
+                        <span
+                          className="chip-badge"
+                          style={{ background: FACE_COLORS[f], color: contrastColor(FACE_COLORS[f]) }}
+                        >
+                          {f}
+                        </span>
+                        <span className="chip-arrow">→</span>
+                        <span
+                          className="chip-badge"
+                          style={{ background: FACE_COLORS[top], color: contrastColor(FACE_COLORS[top]) }}
+                        >
+                          {top}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
